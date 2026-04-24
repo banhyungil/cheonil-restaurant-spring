@@ -1,3 +1,25 @@
+server:
+  port: 8080
 spring:
   application:
     name: cheonil-restaurant-spring
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cheonil
+    username: root
+    password: root1!
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui
+    tags-sorter: alpha
+    operations-sorter: alpha
