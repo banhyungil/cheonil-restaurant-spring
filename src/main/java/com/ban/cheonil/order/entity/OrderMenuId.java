@@ -1,19 +1,20 @@
 package com.ban.cheonil.order.entity;
 
+import java.io.Serializable;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotNull;
+
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.io.Serializable;
-
 /**
  * 주문-메뉴 복합키.
- * <p>
- * {@code t_order_menu} 테이블은 (menu_seq, order_seq) 두 컬럼이 묶여 PK 이므로
- * 별도 키 클래스로 분리하고 {@link OrderMenu} 에서 {@code @EmbeddedId} 로 참조한다.
+ *
+ * <p>{@code t_order_menu} 테이블은 (menu_seq, order_seq) 두 컬럼이 묶여 PK 이므로 별도 키 클래스로 분리하고 {@link
+ * OrderMenu} 에서 {@code @EmbeddedId} 로 참조한다.
  */
 @Getter
 @Setter
@@ -27,17 +28,17 @@ import java.io.Serializable;
 // JPA 스펙상 복합키 클래스는 Serializable 이어야 한다.
 // 분산 캐시/세션 직렬화 시 필요.
 public class OrderMenuId implements Serializable {
-    // 직렬화 버전 식별자 — 클래스 구조 변경 시 호환성 판단용.
-    // Java 관행상 Serializable 구현 클래스에 명시. 값 자체는 임의 (JPA Buddy 자동 생성값).
-    private static final long serialVersionUID = 921846760410308980L;
+  // 직렬화 버전 식별자 — 클래스 구조 변경 시 호환성 판단용.
+  // Java 관행상 Serializable 구현 클래스에 명시. 값 자체는 임의 (JPA Buddy 자동 생성값).
+  private static final long serialVersionUID = 921846760410308980L;
 
-    // 필드 = 복합키의 한 컴포넌트. DB 컬럼 menu_seq 매핑.
-    // @EmbeddedId 방식에서는 컬럼 매핑을 "이 키 클래스 안에" 둔다 (엔티티가 아닌 여기).
-    @NotNull
-    @Column(name = "menu_seq", nullable = false)
-    private Short menuSeq;
+  // 필드 = 복합키의 한 컴포넌트. DB 컬럼 menu_seq 매핑.
+  // @EmbeddedId 방식에서는 컬럼 매핑을 "이 키 클래스 안에" 둔다 (엔티티가 아닌 여기).
+  @NotNull
+  @Column(name = "menu_seq", nullable = false)
+  private Short menuSeq;
 
-    @NotNull
-    @Column(name = "order_seq", nullable = false)
-    private Long orderSeq;
+  @NotNull
+  @Column(name = "order_seq", nullable = false)
+  private Long orderSeq;
 }

@@ -3,21 +3,18 @@ plugins {
     id("org.springframework.boot") version "4.0.5"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.asciidoctor.jvm.convert") version "4.0.5"
+    id("com.diffplug.spotless") version "7.0.2"
 }
 
 group = "ban.gil"
+
 version = "0.0.1-SNAPSHOT"
+
 description = "cheonil-restaurant-spring"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
 extra["snippetsDir"] = file("build/generated-snippets")
 
@@ -40,15 +37,30 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok")
 }
 
-tasks.withType<Test> {
-    useJUnitPlatform()
-}
+tasks.withType<Test> { useJUnitPlatform() }
 
-tasks.test {
-    outputs.dir(project.extra["snippetsDir"]!!)
-}
+tasks.test { outputs.dir(project.extra["snippetsDir"]!!) }
 
 tasks.asciidoctor {
     inputs.dir(project.extra["snippetsDir"]!!)
     dependsOn(tasks.test)
 }
+
+spotless {
+    java {
+        target("src/**/*.java")
+        targetExclude("**/build/**", "**/generated/**")
+
+        googleJavaFormat("1.34.0")
+        removeUnusedImports()
+        importOrder("java", "javax", "jakarta", "org", "com", "")
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    kotlinGradle {
+        target("*.gradle.kts")
+        ktfmt().kotlinlangStyle()
+    }
+}
+
+tasks.named("check") { dependsOn("spotlessCheck") }
