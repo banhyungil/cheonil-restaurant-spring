@@ -13,4 +13,4 @@ public record OrderRes(
     OffsetDateTime orderAt,
     OffsetDateTime cookedAt,
     String cmt,
-    List<OrderItemRes> items) {}
+    List<OrderMenuRes> menus) {}

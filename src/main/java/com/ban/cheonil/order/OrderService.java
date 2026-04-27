@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityNotFoundException;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -16,14 +17,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ban.cheonil.order.dto.OrderCreateReq;
 import com.ban.cheonil.order.dto.OrderExtRes;
-import com.ban.cheonil.order.dto.OrderItemRes;
+import com.ban.cheonil.order.dto.OrderMenuRes;
 import com.ban.cheonil.order.dto.OrderMenuExtRes;
 import com.ban.cheonil.order.dto.OrderRes;
+import com.ban.cheonil.order.dto.OrderStatusChangeRes;
 import com.ban.cheonil.order.dto.OrdersListParams;
 import com.ban.cheonil.order.entity.Order;
 import com.ban.cheonil.order.entity.OrderMenu;
 import com.ban.cheonil.order.entity.OrderMenuId;
 import com.ban.cheonil.order.entity.OrderStatus;
+import com.ban.cheonil.order.sse.OrderEvent;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
 
@@ -36,6 +39,7 @@ public class OrderService {
   private final OrderRepo orderRepo;
   private final OrderMenuRepo orderMenuRepo;
   private final StoreRepo storeRepo;
+  private final ApplicationEventPublisher eventPublisher;
 
   /* =========================================================
    * Create
@@ -43,7 +47,7 @@ public class OrderService {
 
   @Transactional
   public OrderRes create(OrderCreateReq ocReq) {
-    int amount = ocReq.items().stream().mapToInt(i -> i.price() * i.cnt()).sum();
+    int amount = ocReq.menus().stream().mapToInt(i -> i.price() * i.cnt()).sum();
 
     Order order = new Order();
     order.setStoreSeq(ocReq.storeSeq());
@@ -56,7 +60,7 @@ public class OrderService {
     Order saved = orderRepo.save(order);
 
     List<OrderMenu> menus =
-        ocReq.items().stream()
+        ocReq.menus().stream()
             .map(
                 i -> {
                   OrderMenuId omId = new OrderMenuId();
@@ -70,7 +74,12 @@ public class OrderService {
                   return om;
                 })
             .toList();
+
     orderMenuRepo.saveAll(menus);
+
+    // SSE — full aggregate 로 변환해서 broadcast (REST 응답은 OrderRes 유지)
+    OrderExtRes ext = assemble(List.of(saved)).getFirst();
+    eventPublisher.publishEvent(new OrderEvent.Created(ext));
 
     return toCreateRes(saved, menus);
   }
@@ -114,7 +123,7 @@ public class OrderService {
    * COOKED 진입 시 cookedAt = now, READY 복귀 시 cookedAt = null.
    */
   @Transactional
-  public OrderExtRes changeStatus(Long seq, OrderStatus newStatus) {
+  public OrderStatusChangeRes changeStatus(Long seq, OrderStatus newStatus) {
     Order order =
         orderRepo
             .findById(seq)
@@ -127,7 +136,80 @@ public class OrderService {
     order.setModAt(OffsetDateTime.now());
     // dirty checking 으로 자동 update — save() 호출 불필요
 
-    return assemble(List.of(order)).getFirst();
+    OrderStatusChangeRes res =
+        new OrderStatusChangeRes(
+            order.getSeq(), order.getStatus(), order.getCookedAt(), order.getModAt());
+    eventPublisher.publishEvent(new OrderEvent.StatusChanged(res));
+    return res;
+  }
+
+  /**
+   * 주문 전체 교체 (PUT 의미). 매장/비고/메뉴 항목을 새 값으로 바꾼다.
+   *
+   * <p>READY 상태에서만 허용 — 조리 시작 후엔 항목 변경 차단.
+   */
+  @Transactional
+  public OrderExtRes update(Long seq, OrderCreateReq ocReq) {
+    Order order =
+        orderRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
+    if (order.getStatus() != OrderStatus.READY) {
+      throw new IllegalStateException(
+          "READY 상태에서만 수정 가능 (현재: " + order.getStatus() + ")");
+    }
+
+    int amount = ocReq.menus().stream().mapToInt(i -> i.price() * i.cnt()).sum();
+    order.setStoreSeq(ocReq.storeSeq());
+    order.setAmount(amount);
+    order.setCmt(ocReq.cmt());
+    order.setModAt(OffsetDateTime.now());
+
+    // 기존 메뉴 항목 전부 제거 후 재등록 (PUT — 전체 교체 의미)
+    orderMenuRepo.deleteByIdOrderSeq(seq);
+    List<OrderMenu> newMenus =
+        ocReq.menus().stream()
+            .map(
+                i -> {
+                  OrderMenuId omId = new OrderMenuId();
+                  omId.setMenuSeq(i.menuSeq());
+                  omId.setOrderSeq(seq);
+
+                  OrderMenu om = new OrderMenu();
+                  om.setId(omId);
+                  om.setPrice(i.price());
+                  om.setCnt(i.cnt());
+                  return om;
+                })
+            .toList();
+    orderMenuRepo.saveAll(newMenus);
+
+    OrderExtRes ext = assemble(List.of(order)).getFirst();
+    eventPublisher.publishEvent(new OrderEvent.Updated(ext));
+    return ext;
+  }
+
+  /* =========================================================
+   * Delete
+   * ========================================================= */
+
+  /**
+   * 주문 삭제. 메뉴 항목까지 cascade 삭제.
+   *
+   * <p>PAID 상태는 매출 데이터 보존 위해 삭제 차단. 환불은 별도 정책으로 처리.
+   */
+  @Transactional
+  public void remove(Long seq) {
+    Order order =
+        orderRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
+    if (order.getStatus() == OrderStatus.PAID) {
+      throw new IllegalStateException("PAID 주문은 삭제 불가 (환불 처리 필요)");
+    }
+    orderMenuRepo.deleteByIdOrderSeq(seq);
+    orderRepo.delete(order);
+    eventPublisher.publishEvent(new OrderEvent.Removed(seq));
   }
 
   /* =========================================================
@@ -219,9 +301,9 @@ public class OrderService {
   }
 
   private OrderRes toCreateRes(Order order, List<OrderMenu> menus) {
-    List<OrderItemRes> items =
+    List<OrderMenuRes> menuItems =
         menus.stream()
-            .map(m -> new OrderItemRes(m.getId().getMenuSeq(), m.getPrice(), m.getCnt()))
+            .map(m -> new OrderMenuRes(m.getId().getMenuSeq(), m.getPrice(), m.getCnt()))
             .toList();
     return new OrderRes(
         order.getSeq(),
@@ -231,6 +313,6 @@ public class OrderService {
         order.getOrderAt(),
         order.getCookedAt(),
         order.getCmt(),
-        items);
+        menuItems);
   }
 }

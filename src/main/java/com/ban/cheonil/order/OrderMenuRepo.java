@@ -28,4 +28,11 @@ public interface OrderMenuRepo extends JpaRepository<OrderMenu, OrderMenuId> {
             where om.id.orderSeq in :orderSeqs
             """)
   List<OrderMenuExtRes> findExtsByOrderSeqs(@Param("orderSeqs") List<Long> orderSeqs);
+
+  /**
+   * 한 주문의 모든 메뉴 항목 삭제 (주문 수정/삭제 시 사용).
+   *
+   * <p>derived query — 복합키의 orderSeq 컴포넌트로 매칭. {@code @EmbeddedId id.orderSeq} 경로 표현.
+   */
+  void deleteByIdOrderSeq(Long orderSeq);
 }
