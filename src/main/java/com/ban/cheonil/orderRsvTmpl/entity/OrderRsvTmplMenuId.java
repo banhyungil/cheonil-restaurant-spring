@@ -1,6 +1,4 @@
-package com.ban.cheonil.entities;
-
-// t_order_rsv 존재로 M prefix를 유지
+package com.ban.cheonil.orderRsvTmpl.entity;
 
 import java.io.Serializable;
 
@@ -12,11 +10,12 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+/** 템플릿-메뉴 복합키. (menu_seq, rsv_tmpl_seq) 조합. */
 @Getter
 @Setter
 @EqualsAndHashCode
 @Embeddable
-public class MOrderRsvMenuId implements Serializable {
+public class OrderRsvTmplMenuId implements Serializable {
   private static final long serialVersionUID = -3170649659091315288L;
 
   @NotNull

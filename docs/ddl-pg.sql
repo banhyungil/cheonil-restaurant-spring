@@ -196,18 +196,47 @@ comment on column public.m_unit.is_unit_cnt is '단위 수량 사용 여부';
 alter table public.m_unit
     owner to root;
 
+create table public.m_product
+(
+    seq          serial
+        primary key,
+    prd_info_seq smallint not null,
+    unit_seq     smallint not null,
+    cmt varchar(1000),
+    unit_cnts    numeric(6, 2)[]
+);
+
+comment on table public.m_product is '제품 (제품 정보 + 단위 조합)';
+
+comment on column public.m_product.seq is 'PK';
+
+comment on column public.m_product.prd_info_seq is '제품 정보 FK (m_product_info.seq)';
+
+comment on column public.m_product.unit_seq is '단위 FK (m_unit.seq)';
+
+comment on column public.m_product.unit_cnts is '단위별 수량 옵션 배열 (예: {1, 5, 10})';
+
+alter table public.m_product
+    owner to root;
+
+create index idx_product_prd_info
+    on public.m_product (prd_info_seq);
+
+create index idx_product_unit
+    on public.m_product (unit_seq);
+
 create table public.m_order_rsv_tmpl
 (
     seq       smallserial
         primary key,
-    store_seq smallint    not null,
-    nm        varchar(40) not null,
-    amount    integer     not null,
-    rsv_time  time        not null,
-    day_types day_type[]  not null,
+    store_seq smallint                                       not null,
+    nm        varchar(40)                                    not null,
+    amount    integer                                        not null,
+    rsv_time  time                                           not null,
+    day_types day_type[]                                     not null,
     cmt       varchar(1000),
     active    boolean                  default true,
-    start_dt  date,
+    start_dt  date                     default (now())::date not null,
     end_dt    date,
     options   jsonb,
     reg_at    timestamp with time zone default now(),
@@ -340,7 +369,7 @@ alter table public.t_order_menu
 
 create index idx_order_menu_order
     on public.t_order_menu (order_seq);
-
+    
 create table public.t_order_rsv
 (
     seq          bigserial
@@ -350,6 +379,7 @@ create table public.t_order_rsv
     amount       integer                                                 not null,
     rsv_at       timestamp with time zone                                not null,
     status       rsv_status               default 'RESERVED'::rsv_status not null,
+    cmt          varchar(1000),
     reg_at       timestamp with time zone default now()                  not null,
     mod_at       timestamp with time zone default now()                  not null
 );
@@ -644,34 +674,4 @@ create index idx_product_info_ingd
 
 create index idx_product_info_brand
     on public.m_product_info (brand_seq);
-
-create table public.m_product
-(
-    seq          serial
-        constraint m_product2_pkey
-            primary key,
-    prd_info_seq smallint not null,
-    unit_seq     smallint not null,
-    cmt          varchar(1000),
-    unit_cnts    numeric(6, 2)[]
-);
-
-comment on table public.m_product is '제품 (제품 정보 + 단위 조합)';
-
-comment on column public.m_product.seq is 'PK';
-
-comment on column public.m_product.prd_info_seq is '제품 정보 FK (m_product_info.seq)';
-
-comment on column public.m_product.unit_seq is '단위 FK (m_unit.seq)';
-
-comment on column public.m_product.unit_cnts is '단위별 수량 옵션 배열 (예: {1, 5, 10})';
-
-alter table public.m_product
-    owner to root;
-
-create index idx_product_prd_info
-    on public.m_product (prd_info_seq);
-
-create index idx_product_unit
-    on public.m_product (unit_seq);
 

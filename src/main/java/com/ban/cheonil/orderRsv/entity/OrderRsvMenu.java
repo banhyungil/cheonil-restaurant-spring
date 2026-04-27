@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.orderRsv.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;

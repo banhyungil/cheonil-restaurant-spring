@@ -1,6 +1,4 @@
-package com.ban.cheonil.entities;
-
-// t_order_rsv 존재로 M prefix를 유지
+package com.ban.cheonil.orderRsvTmpl.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
@@ -15,8 +13,8 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "m_order_rsv_menu")
-public class MOrderRsvMenu {
-  @EmbeddedId private MOrderRsvMenuId id;
+public class OrderRsvTmplMenu {
+  @EmbeddedId private OrderRsvTmplMenuId id;
 
   @NotNull
   @Column(name = "price", nullable = false)

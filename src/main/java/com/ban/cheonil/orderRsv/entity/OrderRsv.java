@@ -1,11 +1,20 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.orderRsv.entity;
 
 import java.time.OffsetDateTime;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -24,6 +33,7 @@ public class OrderRsv {
   @Column(name = "store_seq", nullable = false)
   private Short storeSeq;
 
+  /** 템플릿 유래일 때만 값 존재. null = 일회성. */
   @Column(name = "rsv_tmpl_seq")
   private Short rsvTmplSeq;
 
@@ -35,9 +45,15 @@ public class OrderRsv {
   @Column(name = "rsv_at", nullable = false)
   private OffsetDateTime rsvAt;
 
+  @NotNull
+  @Enumerated(EnumType.STRING)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
   @ColumnDefault("'RESERVED'")
-  @Column(name = "status", columnDefinition = "rsv_status not null")
-  private Object status;
+  @Column(name = "status", nullable = false, columnDefinition = "rsv_status")
+  private RsvStatus status;
+
+  @Column(name = "cmt", length = 1000)
+  private String cmt;
 
   @NotNull
   @ColumnDefault("now()")

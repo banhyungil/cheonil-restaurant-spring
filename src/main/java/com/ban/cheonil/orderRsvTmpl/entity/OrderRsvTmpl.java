@@ -1,13 +1,16 @@
-package com.ban.cheonil.entities;
-
-// t_order_rsv 존재로 M prefix를 유지
+package com.ban.cheonil.orderRsvTmpl.entity;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -22,7 +25,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "m_order_rsv_tmpl")
-public class MOrderRsvTmpl {
+public class OrderRsvTmpl {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(nullable = false)
@@ -45,8 +48,14 @@ public class MOrderRsvTmpl {
   @Column(name = "rsv_time", nullable = false)
   private LocalTime rsvTime;
 
-  @Column(name = "day_types", columnDefinition = "day_type[] not null")
-  private Object dayTypes;
+  /**
+   * PostgreSQL custom enum array {@code day_type[]}. JPA 가 enum array 를 직접 매핑하지 못해 String[] 로 받고
+   * DTO 변환 시점에 {@link DayType} 으로 변환.
+   */
+  @NotNull
+  @JdbcTypeCode(SqlTypes.ARRAY)
+  @Column(name = "day_types", nullable = false, columnDefinition = "day_type[]")
+  private String[] dayTypes;
 
   @Size(max = 1000)
   @Column(name = "cmt", length = 1000)
@@ -56,7 +65,9 @@ public class MOrderRsvTmpl {
   @Column(name = "active")
   private Boolean active;
 
-  @Column(name = "start_dt")
+  @NotNull
+  @ColumnDefault("(now())::date")
+  @Column(name = "start_dt", nullable = false)
   private LocalDate startDt;
 
   @Column(name = "end_dt")

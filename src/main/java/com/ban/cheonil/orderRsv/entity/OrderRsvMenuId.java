@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.orderRsv.entity;
 
 import java.io.Serializable;
 
@@ -10,6 +10,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+/** 예약-메뉴 복합키. (menu_seq, rsv_seq) 조합. */
 @Getter
 @Setter
 @EqualsAndHashCode
