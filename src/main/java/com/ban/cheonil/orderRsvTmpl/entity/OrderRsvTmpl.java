@@ -1,10 +1,5 @@
 package com.ban.cheonil.orderRsvTmpl.entity;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.util.Map;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -13,13 +8,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-
-import lombok.Getter;
-import lombok.Setter;
 
 @Getter
 @Setter
@@ -49,8 +46,12 @@ public class OrderRsvTmpl {
   private LocalTime rsvTime;
 
   /**
-   * PostgreSQL custom enum array {@code day_type[]}. JPA 가 enum array 를 직접 매핑하지 못해 String[] 로 받고
-   * DTO 변환 시점에 {@link DayType} 으로 변환.
+   * PostgreSQL custom enum array {@code day_type[]}.
+   *
+   * <p>Hibernate 가 enum array 를 PG custom enum array 로 직접 매핑 못 함 (ordinal smallint[] 으로 직렬화 시도 →
+   * PSQL ERROR: "expression is of type smallint[]"). String[] 로 받고 DTO 변환 시점에 {@link DayType} 으로
+   * 변환. 추후 hypersistence-utils 도입 시 DayType[] 직접 매핑 가능. DB CAST 문 추가: CREATE CAST (varchar[] AS
+   * day_type[]) WITH INOUT AS IMPLICIT;
    */
   @NotNull
   @JdbcTypeCode(SqlTypes.ARRAY)
@@ -85,3 +86,13 @@ public class OrderRsvTmpl {
   @Column(name = "mod_at")
   private OffsetDateTime modAt;
 }
+
+/**
+ * "@Column"(nullable = false) (JPA)
+ *
+ * <p>DDL 생성 시 DB 스키마 레벨 "@NotNull" (Bean Validation - jakarta.validation)
+ *
+ * <p>엔티티 저장/수정 전 애플리케이션 레벨 검증 ConstraintViolationException 발생 빠른 실패 + 명확한 에러 메시지
+ *
+ * <p>결론: 둘 다 쓰는 게 베스트 프랙티스.
+ */
