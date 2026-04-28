@@ -50,7 +50,7 @@ public class OrderRsvTmplService {
     tmpl.setNm(req.nm());
     tmpl.setAmount(amount);
     tmpl.setRsvTime(req.rsvTime());
-    tmpl.setDayTypes(toStringArray(req.dayTypes()));
+    tmpl.setDayTypes(toDayTypeArray(req.dayTypes()));
     tmpl.setStartDt(req.startDt() != null ? req.startDt() : LocalDate.now());
     tmpl.setEndDt(req.endDt());
     tmpl.setCmt(req.cmt());
@@ -103,7 +103,7 @@ public class OrderRsvTmplService {
     tmpl.setNm(req.nm());
     tmpl.setAmount(amount);
     tmpl.setRsvTime(req.rsvTime());
-    tmpl.setDayTypes(toStringArray(req.dayTypes()));
+    tmpl.setDayTypes(toDayTypeArray(req.dayTypes()));
     tmpl.setStartDt(req.startDt() != null ? req.startDt() : tmpl.getStartDt());
     tmpl.setEndDt(req.endDt());
     tmpl.setCmt(req.cmt());
@@ -161,7 +161,7 @@ public class OrderRsvTmplService {
                   m.setCnt(i.cnt());
                   return m;
                 })
-            .toList();
+          .toList();
     orderRsvTmplMenuRepo.saveAll(menus);
   }
 
@@ -224,18 +224,21 @@ public class OrderRsvTmplService {
               (r, q, cb) ->
                   cb.isNotNull(
                       cb.function(
-                          "array_position", Integer.class, r.get("dayTypes"), cb.literal(dayName))));
+                          "array_position",
+                          Integer.class,
+                          r.get("dayTypes"),
+                          cb.literal(dayName))));
     }
     return spec;
   }
 
-  /** {@link DayType} 리스트 → DB 저장용 String[]. */
-  private String[] toStringArray(List<DayType> dayTypes) {
+  /** {@code List<DayType>} → DB 저장용 {@code String[]} (PG day_type[] 호환). */
+  private String[] toDayTypeArray(List<DayType> dayTypes) {
     if (dayTypes == null) return new String[0];
     return dayTypes.stream().map(DayType::name).toArray(String[]::new);
   }
 
-  /** DB 의 String[] → {@link DayType} 리스트 (DTO 응답용). */
+  /** DB 의 {@code String[]} → {@code List<DayType>} (DTO 응답용). */
   private List<DayType> toDayTypes(String[] arr) {
     if (arr == null) return List.of();
     return Arrays.stream(arr).map(DayType::valueOf).toList();
