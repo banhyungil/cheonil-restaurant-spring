@@ -2,11 +2,11 @@ package com.ban.cheonil.orderRsvTmpl.scheduler;
 
 import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplRepo;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +26,7 @@ public class OrderRsvSchedulerService {
 
   private final OrderRsvTmplRepo tmplRepo;
   private final OrderRsvCreator creator;
+  private final Clock clock;
 
   /**
    * [windowStart, windowEnd) 범위의 rsv_time 인 활성 템플릿을 모두 처리.
@@ -45,7 +46,7 @@ public class OrderRsvSchedulerService {
     for (OrderRsvTmpl tmpl : tmpls) {
       // 실제 예약 시각 = 같은 날짜 + 템플릿 rsv_time
       OffsetDateTime rsvAt =
-          LocalDateTime.of(date, tmpl.getRsvTime()).atZone(ZoneId.systemDefault()).toOffsetDateTime();
+          LocalDateTime.of(date, tmpl.getRsvTime()).atZone(clock.getZone()).toOffsetDateTime();
 
       try {
         if (creator.create(tmpl, rsvAt)) {

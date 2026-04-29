@@ -1,5 +1,6 @@
 package com.ban.cheonil.orderRsvTmpl.scheduler;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,10 +27,11 @@ public class OrderRsvSchedulerJob {
   private static final int WINDOW_MINUTES = 10;
 
   private final OrderRsvSchedulerService service;
+  private final Clock clock;
 
   @Scheduled(cron = "0 */10 * * * *")
   public void tick() {
-    OffsetDateTime now = OffsetDateTime.now().withSecond(0).withNano(0);
+    OffsetDateTime now = OffsetDateTime.now(clock).withSecond(0).withNano(0);
     OffsetDateTime windowStart = now.plusMinutes(LEAD_MINUTES);
     OffsetDateTime windowEnd = windowStart.plusMinutes(WINDOW_MINUTES);
 

@@ -2,13 +2,14 @@ package com.ban.cheonil.playground;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
 import org.junit.jupiter.api.Test;
 
 class StreamApiTest {
@@ -31,6 +32,12 @@ class StreamApiTest {
 
     List<Integer> filters = nums.stream().filter(n -> n % 2 == 0).toList();
     List<Integer> maps = nums.stream().map(n -> n * 10).toList();
+
+    Set<String> zones =
+        ZoneId.getAvailableZoneIds().stream()
+            .filter((z) -> z.startsWith("Asia"))
+            .collect(Collectors.toSet());
+    zones.forEach(System.out::println);
 
     System.out.println("filters: " + filters);
     System.out.println("maps: " + maps);

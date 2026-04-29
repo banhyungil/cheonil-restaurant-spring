@@ -28,10 +28,19 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     annotationProcessor("org.projectlombok:lombok")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-restdocs")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
+    // Spring Boot 4 — test slice 어노테이션이 도메인별 모듈로 분리됨.
+    testImplementation("org.springframework.boot:spring-boot-data-jpa-test") // @DataJpaTest
+    testImplementation("org.springframework.boot:spring-boot-jdbc-test") // @AutoConfigureTestDatabase
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
+    // Testcontainers 2.x — artifact 이름이 testcontainers-* prefix 로 변경됨
+    // (1.x: postgresql / junit-jupiter → 2.x: testcontainers-postgresql / testcontainers-junit-jupiter)
+    testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.4"))
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testCompileOnly("org.projectlombok:lombok")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testAnnotationProcessor("org.projectlombok:lombok")

@@ -381,7 +381,9 @@ create table public.t_order_rsv
     status       rsv_status               default 'RESERVED'::rsv_status not null,
     cmt          varchar(1000),
     reg_at       timestamp with time zone default now()                  not null,
-    mod_at       timestamp with time zone default now()                  not null
+    mod_at       timestamp with time zone default now()                  not null,
+    constraint uk_order_rsv_tmpl_at
+        unique (rsv_tmpl_seq, rsv_at)
 );
 
 comment on table public.t_order_rsv is '예약 주문 인스턴스 (일회성 또는 템플릿 기반 반복)';
@@ -398,6 +400,8 @@ comment on column public.t_order_rsv.rsv_at is '예약 일시';
 
 comment on column public.t_order_rsv.status is '예약 상태 (RESERVED/COMPLETED/CANCELED)';
 
+comment on column public.t_order_rsv.cmt is '비고';
+
 comment on column public.t_order_rsv.reg_at is '등록 시각';
 
 comment on column public.t_order_rsv.mod_at is '수정 시각';
@@ -410,6 +414,7 @@ create index idx_order_rsv_store
 
 create index idx_order_rsv_tmpl
     on public.t_order_rsv (rsv_tmpl_seq);
+
 
 create table public.t_order_rsv_menu
 (
@@ -675,3 +680,4 @@ create index idx_product_info_ingd
 create index idx_product_info_brand
     on public.m_product_info (brand_seq);
 
+CREATE CAST (varchar[] AS day_type[]) WITH INOUT AS IMPLICIT;

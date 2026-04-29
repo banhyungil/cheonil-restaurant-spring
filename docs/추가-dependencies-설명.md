@@ -182,8 +182,8 @@ implementation("org.springframework.boot:spring-boot-starter-actuator")
 ### 3.4 TestContainers — 통합 테스트용 PG
 
 ```kotlin
-testImplementation("org.testcontainers:postgresql:1.20.4")
-testImplementation("org.testcontainers:junit-jupiter:1.20.4")
+testImplementation("org.testcontainers:postgresql:1.21.4")
+testImplementation("org.testcontainers:junit-jupiter:1.21.4")
 testImplementation("org.springframework.boot:spring-boot-testcontainers")
 ```
 
@@ -229,8 +229,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
-    testImplementation("org.testcontainers:postgresql:1.20.4")                    // 추가
-    testImplementation("org.testcontainers:junit-jupiter:1.20.4")                 // 추가
+    testImplementation("org.testcontainers:postgresql:1.21.4")                    // 추가
+    testImplementation("org.testcontainers:junit-jupiter:1.21.4")                 // 추가
     testImplementation("org.springframework.boot:spring-boot-testcontainers")     // 추가
     testCompileOnly("org.projectlombok:lombok")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

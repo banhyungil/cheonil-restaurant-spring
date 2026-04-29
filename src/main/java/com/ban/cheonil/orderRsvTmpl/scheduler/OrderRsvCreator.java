@@ -9,6 +9,7 @@ import com.ban.cheonil.orderRsv.entity.RsvStatus;
 import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplMenuRepo;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmplMenu;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class OrderRsvCreator {
   private final OrderRsvRepo orderRsvRepo;
   private final OrderRsvMenuRepo orderRsvMenuRepo;
   private final OrderRsvTmplMenuRepo tmplMenuRepo;
+  private final Clock clock;
 
   /**
    * 주문 에약 템플릿 을 통한 주문 예약 생성
@@ -54,7 +56,7 @@ public class OrderRsvCreator {
     rsv.setAmount(tmpl.getAmount());
     rsv.setRsvAt(rsvAt);
     rsv.setStatus(RsvStatus.RESERVED);
-    OffsetDateTime now = OffsetDateTime.now();
+    OffsetDateTime now = OffsetDateTime.now(clock);
     rsv.setRegAt(now);
     rsv.setModAt(now);
     OrderRsv saved = orderRsvRepo.save(rsv);
