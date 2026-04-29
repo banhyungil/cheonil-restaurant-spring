@@ -1,12 +1,5 @@
 package com.ban.cheonil.orderRsvTmpl.scheduler;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.ban.cheonil.orderRsv.OrderRsvMenuRepo;
 import com.ban.cheonil.orderRsv.OrderRsvRepo;
 import com.ban.cheonil.orderRsv.entity.OrderRsv;
@@ -16,14 +9,18 @@ import com.ban.cheonil.orderRsv.entity.RsvStatus;
 import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplMenuRepo;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmplMenu;
-
+import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 한 템플릿 → 한 OrderRsv + 메뉴 항목 일체 생성을 **독립 트랜잭션**으로 처리.
  *
- * <p>{@link OrderRsvSchedulerService} 가 batch 안에서 이 빈을 호출하면 매 호출마다 새 트랜잭션이 열림
- * ({@code REQUIRES_NEW}). 한 템플릿 INSERT 가 실패해도 다른 템플릿의 트랜잭션엔 영향 없음.
+ * <p>{@link OrderRsvSchedulerService} 가 batch 안에서 이 빈을 호출하면 매 호출마다 새 트랜잭션이 열림 ({@code
+ * REQUIRES_NEW}). 한 템플릿 INSERT 가 실패해도 다른 템플릿의 트랜잭션엔 영향 없음.
  *
  * <p>self-invocation (같은 빈 안의 메서드 호출은 proxy 우회) 회피를 위해 별도 빈으로 분리.
  */
@@ -36,6 +33,15 @@ public class OrderRsvCreator {
   private final OrderRsvTmplMenuRepo tmplMenuRepo;
 
   /**
+   * 주문 에약 템플릿 을 통한 주문 예약 생성
+   *
+   * <p>각 주문 생성은 별도의 트랜잭션을 가진다. {@code Propagation.REQUIRES_NEW}
+   *
+   * <ul>
+   *   <li>REQUIRED (기본) 기존 트랜잭션 있으면 참여, 없으면 신규 생성
+   *   <li>REQUIRES_NEW 기존 트랜잭션 일시 중단 → 항상 새 트랜잭션
+   * </ul>
+   *
    * @return true = 새로 생성됨, false = 이미 존재 (skip)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
