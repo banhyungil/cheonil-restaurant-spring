@@ -1,7 +1,15 @@
 package com.ban.cheonil.orderRsvTmpl;
 
+import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplCreateReq;
+import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplExtRes;
+import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplPatchActiveReq;
+import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplsListParams;
+import com.ban.cheonil.orderRsvTmpl.scheduler.OrderRsvSchedulerService;
+import java.time.OffsetDateTime;
 import java.util.List;
-
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -13,15 +21,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplCreateReq;
-import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplExtRes;
-import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplPatchActiveReq;
-import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplsListParams;
-
-import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/order-rsv-tmpls")
@@ -29,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class OrderRsvTmplController {
 
   private final OrderRsvTmplService orderRsvTmplService;
+  private final OrderRsvSchedulerService orderRsvSchedulerService;
 
   /** 템플릿 목록 — 매장/메뉴 join aggregate. dayType 필터는 day_types 배열에 해당 요일 포함된 것만. */
   @GetMapping
@@ -58,8 +61,7 @@ public class OrderRsvTmplController {
   /** 활성 토글. */
   @PatchMapping("/{seq}/active")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void patchActive(
-      @PathVariable Short seq, @RequestBody OrderRsvTmplPatchActiveReq req) {
+  public void patchActive(@PathVariable Short seq, @RequestBody OrderRsvTmplPatchActiveReq req) {
     orderRsvTmplService.patchActive(seq, req.active());
   }
 
@@ -68,5 +70,21 @@ public class OrderRsvTmplController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void remove(@PathVariable Short seq) {
     orderRsvTmplService.remove(seq);
+  }
+
+  /**
+   * 수동 trigger — 지정된 window 의 활성 템플릿으로 인스턴스 생성. 운영/디버깅 용도. 멱등성 덕에 여러 번 호출 안전.
+   *
+   * <p>예: {@code POST
+   * /api/order-rsv-tmpls/generate-rsv?windowStart=2026-04-29T12:30:00%2B09:00&windowMinutes=10}
+   */
+  @PostMapping("/generate-rsv")
+  public Map<String, Integer> generateRsv(
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime windowStart,
+      @RequestParam(defaultValue = "10") int windowMinutes) {
+    int createdCnt =
+        orderRsvSchedulerService.generateForWindow(
+            windowStart, windowStart.plusMinutes(windowMinutes));
+    return Map.of("createdCnt", createdCnt);
   }
 }

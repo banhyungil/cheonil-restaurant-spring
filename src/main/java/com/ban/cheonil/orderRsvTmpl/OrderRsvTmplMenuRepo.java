@@ -26,4 +26,7 @@ public interface OrderRsvTmplMenuRepo
 
   /** 한 템플릿의 모든 메뉴 항목 삭제 (수정/삭제 시 사용). */
   void deleteByIdRsvTmplSeq(Short rsvTmplSeq);
+
+  /** 한 템플릿의 메뉴 항목 조회 (스케줄러가 인스턴스 생성 시 복사용). */
+  List<OrderRsvTmplMenu> findByIdRsvTmplSeq(Short rsvTmplSeq);
 }
