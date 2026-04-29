@@ -13,4 +13,7 @@ public interface OrderRepo extends JpaRepository<Order, Long>, JpaSpecificationE
 
   /** 주문 목록용 — OrderSummary projection 으로 필요한 컬럼만 조회. */
   List<OrderSummary> findAllByStatus(OrderStatus status);
+
+  /** 멱등성 체크 — 특정 예약(rsvSeq) 으로 이미 t_order 가 생성됐는지. */
+  boolean existsByRsvSeq(Long rsvSeq);
 }

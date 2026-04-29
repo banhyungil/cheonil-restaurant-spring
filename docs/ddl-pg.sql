@@ -376,6 +376,7 @@ create table public.t_order_rsv
         primary key,
     store_seq    smallint                                                not null,
     rsv_tmpl_seq smallint,
+    order_seq bigint,
     amount       integer                                                 not null,
     rsv_at       timestamp with time zone                                not null,
     status       rsv_status               default 'RESERVED'::rsv_status not null,
@@ -393,6 +394,8 @@ comment on column public.t_order_rsv.seq is 'PK';
 comment on column public.t_order_rsv.store_seq is '가게 FK (m_store.seq)';
 
 comment on column public.t_order_rsv.rsv_tmpl_seq is '예약 템플릿 FK (m_order_rsv_tmpl.seq) - NULL이면 일회성 예약';
+
+comment on column public.t_order_rsv.order_seq is '주문 FK (t_order.seq)';
 
 comment on column public.t_order_rsv.amount is '예약 금액';
 
@@ -414,6 +417,9 @@ create index idx_order_rsv_store
 
 create index idx_order_rsv_tmpl
     on public.t_order_rsv (rsv_tmpl_seq);
+
+create index idx_order_rsv_order
+    on public.t_order_rsv (order_seq);
 
 
 create table public.t_order_rsv_menu

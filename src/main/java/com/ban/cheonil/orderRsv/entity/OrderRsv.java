@@ -37,6 +37,10 @@ public class OrderRsv {
   @Column(name = "rsv_tmpl_seq")
   private Short rsvTmplSeq;
 
+  /** 예약 접수 시 생성된 주문 */
+  @Column(name = "order_seq")
+  private Long orderSeq;
+
   @NotNull
   @Column(name = "amount", nullable = false)
   private Integer amount;
