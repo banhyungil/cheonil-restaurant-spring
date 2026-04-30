@@ -75,11 +75,13 @@ create table m_store
     cmt       varchar(1000),
     latitude  double precision,
     longitude double precision,
+    active    boolean                  not null default true,
     options   jsonb,
     reg_at    timestamp with time zone default now(),
     mod_at    timestamp with time zone default now()
 );
 comment on table m_store is '가게 (지점)';
+comment on column m_store.active is '활성화 여부 — false 면 영업/주문 페이지에서 제외 (관리자 페이지엔 노출)';
 create index idx_store_ctg on m_store (ctg_seq);
 
 -- ---------------------------------------------------------------------
@@ -106,11 +108,13 @@ create table m_menu
     nm_s    varchar(10),
     price   integer     not null,
     cmt     varchar(1000),
+    active  boolean                  not null default true,
     options jsonb,
     reg_at  timestamp with time zone default now(),
     mod_at  timestamp with time zone default now()
 );
 comment on table m_menu is '메뉴';
+comment on column m_menu.active is '활성화 여부 — false 면 영업/주문 페이지에서 제외 (관리자 페이지엔 노출)';
 create index idx_menu_ctg on m_menu (ctg_seq);
 
 -- ---------------------------------------------------------------------

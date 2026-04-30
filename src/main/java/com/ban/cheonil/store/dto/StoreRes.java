@@ -13,6 +13,7 @@ public record StoreRes(
     String cmt,
     Double latitude,
     Double longitude,
+    Boolean active,
     Map<String, Object> options,
     OffsetDateTime regAt,
     OffsetDateTime modAt) {
@@ -25,6 +26,7 @@ public record StoreRes(
         s.getCmt(),
         s.getLatitude(),
         s.getLongitude(),
+        s.getActive(),
         s.getOptions(),
         s.getRegAt(),
         s.getModAt());

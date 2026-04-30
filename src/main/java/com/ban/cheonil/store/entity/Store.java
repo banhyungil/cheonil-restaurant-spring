@@ -47,6 +47,11 @@ public class Store {
   @Column(name = "longitude")
   private Double longitude;
 
+  @NotNull
+  @ColumnDefault("true")
+  @Column(name = "active", nullable = false)
+  private Boolean active;
+
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "options")
   private Map<String, Object> options;

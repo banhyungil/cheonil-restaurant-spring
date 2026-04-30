@@ -65,6 +65,7 @@ create table public.m_store
     cmt       varchar(1000),
     latitude  double precision,
     longitude double precision,
+    active    boolean                  not null default true,
     options   jsonb,
     reg_at    timestamp with time zone default now(),
     mod_at    timestamp with time zone default now()
@@ -85,6 +86,8 @@ comment on column public.m_store.cmt is '비고';
 comment on column public.m_store.latitude is '위도';
 
 comment on column public.m_store.longitude is '경도';
+
+comment on column public.m_store.active is '활성화 여부';
 
 comment on column public.m_store.options is '부가 옵션 (JSON)';
 
@@ -133,6 +136,7 @@ create table public.m_menu
         unique,
     nm_s    varchar(10),
     price   integer     not null,
+    active  boolean                  not null default true,
     cmt     varchar(1000),
     options jsonb,
     reg_at  timestamp with time zone default now(),
@@ -150,6 +154,8 @@ comment on column public.m_menu.nm is '메뉴명';
 comment on column public.m_menu.nm_s is '짧은 이름 / 약칭';
 
 comment on column public.m_menu.price is '가격 (원)';
+
+comment on column public.m_menu.active is '활성화 여부';
 
 comment on column public.m_menu.cmt is '비고';
 

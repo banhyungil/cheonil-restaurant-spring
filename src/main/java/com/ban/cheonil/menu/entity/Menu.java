@@ -45,6 +45,11 @@ public class Menu {
   @Column(name = "cmt", length = 1000)
   private String cmt;
 
+  @NotNull
+  @ColumnDefault("true")
+  @Column(name = "active", nullable = false)
+  private Boolean active;
+
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "options")
   private Map<String, Object> options;

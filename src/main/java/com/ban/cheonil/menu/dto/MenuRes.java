@@ -12,6 +12,7 @@ public record MenuRes(
     String nmS,
     Integer price,
     String cmt,
+    Boolean active,
     Map<String, Object> options,
     OffsetDateTime regAt,
     OffsetDateTime modAt) {
@@ -23,6 +24,7 @@ public record MenuRes(
         m.getNmS(),
         m.getPrice(),
         m.getCmt(),
+        m.getActive(),
         m.getOptions(),
         m.getRegAt(),
         m.getModAt());
