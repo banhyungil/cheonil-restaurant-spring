@@ -1,11 +1,15 @@
 package com.ban.cheonil.menu;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+
+import jakarta.persistence.EntityNotFoundException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ban.cheonil.menu.dto.MenuRes;
+import com.ban.cheonil.menu.entity.Menu;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,5 +26,16 @@ public class MenuService {
   public List<MenuRes> findAll(boolean includeInactive) {
     var menus = includeInactive ? menuRepo.findAll() : menuRepo.findByActiveTrue();
     return menus.stream().map(MenuRes::from).toList();
+  }
+
+  /** 활성 토글 — PATCH /active. */
+  @Transactional
+  public void patchActive(Short seq, Boolean active) {
+    Menu m =
+        menuRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("menu " + seq + " not found"));
+    m.setActive(active);
+    m.setModAt(OffsetDateTime.now());
   }
 }

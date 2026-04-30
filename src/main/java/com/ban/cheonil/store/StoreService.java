@@ -1,11 +1,15 @@
 package com.ban.cheonil.store;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+
+import jakarta.persistence.EntityNotFoundException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ban.cheonil.store.dto.StoreRes;
+import com.ban.cheonil.store.entity.Store;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,5 +26,16 @@ public class StoreService {
   public List<StoreRes> findAll(boolean includeInactive) {
     var stores = includeInactive ? storeRepo.findAll() : storeRepo.findByActiveTrue();
     return stores.stream().map(StoreRes::from).toList();
+  }
+
+  /** 활성 토글 — PATCH /active. */
+  @Transactional
+  public void patchActive(Short seq, Boolean active) {
+    Store s =
+        storeRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("store " + seq + " not found"));
+    s.setActive(active);
+    s.setModAt(OffsetDateTime.now());
   }
 }
