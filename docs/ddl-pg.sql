@@ -1,18 +1,32 @@
 create table public.m_setting
 (
-    seq    smallserial
+    code           varchar(40)              not null
         primary key,
-    config jsonb not null
+    default_config jsonb                    not null,
+    user_config    jsonb,
+    mod_at         timestamp with time zone default now()
 );
 
-comment on table public.m_setting is '시스템 전역 설정';
+comment on table public.m_setting is '시스템 전역 설정 (code 기반 lookup, default/user override 분리)';
 
-comment on column public.m_setting.seq is 'PK';
+comment on column public.m_setting.code is 'PK / 설정 코드 (SettingCode enum 과 동기화)';
 
-comment on column public.m_setting.config is '설정 값 (JSON)';
+comment on column public.m_setting.default_config is '시스템 기본값 (seed). 운영자도 변경 가능';
+
+comment on column public.m_setting.user_config is '사용자 override 값. null = 기본값 사용. restore = NULL 로 set';
+
+comment on column public.m_setting.mod_at is '마지막 수정 시각';
 
 alter table public.m_setting
     owner to root;
+
+-- 기본 seed (idempotent)
+insert into public.m_setting (code, default_config)
+values ('STORE_ORDER',          '{"order": []}'::jsonb),
+       ('MENU_ORDER',            '{"order": []}'::jsonb),
+       ('STORE_CATEGORY_ORDER',  '{"order": []}'::jsonb),
+       ('MENU_CATEGORY_ORDER',   '{"order": []}'::jsonb)
+on conflict (code) do nothing;
 
 create table public.m_store_category
 (

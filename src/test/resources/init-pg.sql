@@ -20,3 +20,7 @@ CREATE OR REPLACE FUNCTION array_position(day_type[], varchar)
 RETURNS integer AS $$
     SELECT array_position($1, $2::day_type);
 $$ LANGUAGE sql IMMUTABLE;
+
+-- m_setting 기본 seed (Hibernate 가 테이블 생성 후 자동 실행되진 않으므로,
+-- 테스트에서 setting 데이터 필요한 경우 각 테스트가 직접 INSERT 하거나 이 스크립트가 실행되는 시점 이후
+-- 별도 seed 단계 필요. 본 init 은 enum/cast/extension 만 담당하는 게 원칙이라 여기선 구조만 메모.)
