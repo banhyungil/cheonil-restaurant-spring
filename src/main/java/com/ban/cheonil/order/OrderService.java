@@ -27,6 +27,8 @@ import com.ban.cheonil.order.entity.OrderMenu;
 import com.ban.cheonil.order.entity.OrderMenuId;
 import com.ban.cheonil.order.entity.OrderStatus;
 import com.ban.cheonil.order.sse.OrderEvent;
+import com.ban.cheonil.orderRsv.entity.OrderRsv;
+import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
 
@@ -82,6 +84,51 @@ public class OrderService {
     eventPublisher.publishEvent(new OrderEvent.Created(ext));
 
     return toCreateRes(saved, menus);
+  }
+
+  /**
+   * 예약(t_order_rsv) → 실제 주문(t_order) 변환.
+   *
+   * <p>예약 상태가 RESERVED → COMPLETED 로 전이될 때 {@link
+   * com.ban.cheonil.orderRsv.OrderRsvService} 가 호출. 메뉴 가격은 예약 시점 스냅샷 그대로 복사.
+   *
+   * @return 새로 생성된 Order
+   */
+  @Transactional
+  public Order createFromRsv(OrderRsv rsv, List<OrderRsvMenu> rsvMenus) {
+    Order order = new Order();
+    order.setStoreSeq(rsv.getStoreSeq());
+    order.setRsvSeq(rsv.getSeq());
+    order.setAmount(rsv.getAmount());
+    order.setStatus(OrderStatus.READY);
+    order.setCmt(rsv.getCmt());
+    OffsetDateTime now = OffsetDateTime.now();
+    order.setOrderAt(now);
+    order.setModAt(now);
+    Order saved = orderRepo.save(order);
+
+    List<OrderMenu> menus =
+        rsvMenus.stream()
+            .map(
+                rm -> {
+                  OrderMenuId omId = new OrderMenuId();
+                  omId.setMenuSeq(rm.getId().getMenuSeq());
+                  omId.setOrderSeq(saved.getSeq());
+
+                  OrderMenu om = new OrderMenu();
+                  om.setId(omId);
+                  om.setPrice(rm.getPrice());
+                  om.setCnt(rm.getCnt());
+                  return om;
+                })
+            .toList();
+    orderMenuRepo.saveAll(menus);
+
+    // SSE — full aggregate broadcast (주문 모니터에 즉시 표시)
+    OrderExtRes ext = assemble(List.of(saved)).getFirst();
+    eventPublisher.publishEvent(new OrderEvent.Created(ext));
+
+    return saved;
   }
 
   /* =========================================================
@@ -206,6 +253,27 @@ public class OrderService {
             .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
     if (order.getStatus() == OrderStatus.PAID) {
       throw new IllegalStateException("PAID 주문은 삭제 불가 (환불 처리 필요)");
+    }
+    orderMenuRepo.deleteByIdOrderSeq(seq);
+    orderRepo.delete(order);
+    eventPublisher.publishEvent(new OrderEvent.Removed(seq));
+  }
+
+  /**
+   * 예약 복구(COMPLETED → RESERVED) 시 변환됐던 주문을 삭제.
+   *
+   * <p>READY 상태 주문만 삭제 허용 — 조리 시작(COOKED)/결제(PAID) 된 주문은 차단.
+   * 메뉴 항목도 cascade 삭제 + SSE Removed 이벤트 발행.
+   */
+  @Transactional
+  public void removeIfReady(Long seq) {
+    Order order =
+        orderRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
+    if (order.getStatus() != OrderStatus.READY) {
+      throw new IllegalStateException(
+          "READY 상태 주문만 복구(삭제) 가능 (현재: " + order.getStatus() + ")");
     }
     orderMenuRepo.deleteByIdOrderSeq(seq);
     orderRepo.delete(order);

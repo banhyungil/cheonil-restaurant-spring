@@ -1,21 +1,7 @@
 package com.ban.cheonil.orderRsv;
 
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import jakarta.persistence.EntityNotFoundException;
-
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import com.ban.cheonil.order.OrderService;
+import com.ban.cheonil.order.entity.Order;
 import com.ban.cheonil.orderRsv.dto.OrderRsvCreateReq;
 import com.ban.cheonil.orderRsv.dto.OrderRsvExtRes;
 import com.ban.cheonil.orderRsv.dto.OrderRsvMenuExtRes;
@@ -28,8 +14,20 @@ import com.ban.cheonil.orderRsv.entity.OrderRsvMenuId;
 import com.ban.cheonil.orderRsv.entity.RsvStatus;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
-
+import jakarta.persistence.EntityNotFoundException;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +36,7 @@ public class OrderRsvService {
   private final OrderRsvRepo orderRsvRepo;
   private final OrderRsvMenuRepo orderRsvMenuRepo;
   private final StoreRepo storeRepo;
+  private final OrderService orderService;
 
   /* =========================================================
    * Create
@@ -131,9 +130,15 @@ public class OrderRsvService {
   }
 
   /**
-   * 상태 전이. 모든 전이 허용 (프론트가 시간 기반 revertibility UI 제어).
+   * 상태 전이. 모든 전이 허용 + 주문 도메인 sync.
    *
-   * <p>TODO: RESERVED → COMPLETED 시 t_order 자동 INSERT (예약 → 실제 주문 변환). 현재는 status 만 변경.
+   * <ul>
+   *   <li><b>RESERVED → COMPLETED</b>: t_order 자동 생성 + rsv.orderSeq 채움 + SSE Created broadcast.
+   *       이미 orderSeq 가 있으면 멱등 skip.
+   *   <li><b>COMPLETED → RESERVED</b> (복구): t_order 삭제 + rsv.orderSeq 클리어. 단 주문이 READY 상태일
+   *       때만 — COOKED/PAID 면 IllegalStateException.
+   *   <li>기타 전이 (RESERVED↔CANCELED 등): status 만 변경, 주문 처리 없음.
+   * </ul>
    */
   @Transactional
   public OrderRsvStatusChangeRes changeStatus(Long seq, RsvStatus newStatus) {
@@ -141,6 +146,23 @@ public class OrderRsvService {
         orderRsvRepo
             .findById(seq)
             .orElseThrow(() -> new EntityNotFoundException("orderRsv " + seq + " not found"));
+    RsvStatus prevStatus = rsv.getStatus();
+
+    // 1. RESERVED → COMPLETED: 주문 생성
+    if (prevStatus == RsvStatus.RESERVED && newStatus == RsvStatus.COMPLETED) {
+      if (rsv.getOrderSeq() == null) {
+        List<OrderRsvMenu> rsvMenus = orderRsvMenuRepo.findByIdRsvSeqIn(List.of(rsv.getSeq()));
+        Order created = orderService.createFromRsv(rsv, rsvMenus);
+        rsv.setOrderSeq(created.getSeq());
+      }
+    }
+    // 2. COMPLETED → RESERVED: 주문 삭제 (READY 만 허용)
+    else if (prevStatus == RsvStatus.COMPLETED && newStatus == RsvStatus.RESERVED) {
+      if (rsv.getOrderSeq() != null) {
+        orderService.removeIfReady(rsv.getOrderSeq());
+        rsv.setOrderSeq(null);
+      }
+    }
 
     rsv.setStatus(newStatus);
     rsv.setModAt(OffsetDateTime.now());
@@ -183,7 +205,9 @@ public class OrderRsvService {
         .map(
             r ->
                 toExtRes(
-                    r, storeMap.get(r.getStoreSeq()), menusByRsv.getOrDefault(r.getSeq(), List.of())))
+                    r,
+                    storeMap.get(r.getStoreSeq()),
+                    menusByRsv.getOrDefault(r.getSeq(), List.of())))
         .toList();
   }
 
@@ -216,7 +240,8 @@ public class OrderRsvService {
       // 서버 기준 오늘 0시 ~ 내일 0시
       LocalDate today = LocalDate.now();
       OffsetDateTime start = today.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
-      OffsetDateTime end = today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+      OffsetDateTime end =
+          today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
       Specification<OrderRsv> finalSpec = spec;
       spec =
           finalSpec.and(
