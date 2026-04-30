@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -28,9 +30,12 @@ public class Payment {
   @Column(name = "amount", nullable = false)
   private Integer amount;
 
+  @NotNull
+  @Enumerated(EnumType.STRING)
+  @JdbcTypeCode(SqlTypes.NAMED_ENUM)
   @ColumnDefault("'CASH'")
-  @Column(name = "pay_type", columnDefinition = "pay_type not null")
-  private Object payType;
+  @Column(name = "pay_type", nullable = false, columnDefinition = "pay_type")
+  private PayType payType;
 
   @NotNull
   @Column(name = "pay_at", nullable = false)

@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -29,6 +32,7 @@ public class Product {
   @Column(name = "cmt", length = 1000)
   private String cmt;
 
-  @Column(name = "unit_cnts", columnDefinition = "numeric [](6, 2)")
-  private Object unitCnts;
+  @JdbcTypeCode(SqlTypes.ARRAY)
+  @Column(name = "unit_cnts", columnDefinition = "numeric(6, 2)[]")
+  private java.math.BigDecimal[] unitCnts;
 }

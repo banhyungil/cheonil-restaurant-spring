@@ -22,7 +22,9 @@ public class ExpenseCategory {
   @Column(nullable = false)
   private Integer seq;
 
-  @Column(name = "path", columnDefinition = "ltree not null")
+  @NotNull
+  @JdbcTypeCode(SqlTypes.OTHER)
+  @Column(name = "path", nullable = false, columnDefinition = "ltree")
   private Object path;
 
   @Size(max = 50)

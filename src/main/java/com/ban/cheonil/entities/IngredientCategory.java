@@ -24,7 +24,9 @@ public class IngredientCategory {
   @Column(nullable = false)
   private Short seq;
 
-  @Column(name = "path", columnDefinition = "ltree not null")
+  @NotNull
+  @JdbcTypeCode(SqlTypes.OTHER)
+  @Column(name = "path", nullable = false, columnDefinition = "ltree")
   private Object path;
 
   @Size(max = 30)

@@ -26,6 +26,10 @@ dependencies {
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.postgresql:postgresql")
+    // Flyway — 스키마 마이그레이션. Spring Boot 4 부터 autoconfig 가 도메인별 모듈로 분리되어
+    // spring-boot-flyway 명시적 의존 필요. PG 10+ 부터 flyway-database-postgresql 도 필수.
+    implementation("org.springframework.boot:spring-boot-flyway")
+    implementation("org.flywaydb:flyway-database-postgresql")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
