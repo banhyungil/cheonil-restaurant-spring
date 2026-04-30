@@ -12,6 +12,8 @@ import com.ban.cheonil.orderRsv.entity.OrderRsv;
 import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
 import com.ban.cheonil.orderRsv.entity.OrderRsvMenuId;
 import com.ban.cheonil.orderRsv.entity.RsvStatus;
+import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplRepo;
+import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
 import jakarta.persistence.EntityNotFoundException;
@@ -20,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -35,6 +38,7 @@ public class OrderRsvService {
 
   private final OrderRsvRepo orderRsvRepo;
   private final OrderRsvMenuRepo orderRsvMenuRepo;
+  private final OrderRsvTmplRepo orderRsvTmplRepo;
   private final StoreRepo storeRepo;
   private final OrderService orderService;
 
@@ -188,10 +192,15 @@ public class OrderRsvService {
    * Helpers
    * ========================================================= */
 
-  /** rsv 리스트에 매장/메뉴 정보 batch fetch + Java 측 조립. 총 3 query. */
+  /** rsv 리스트에 매장/템플릿/메뉴 정보 batch fetch + Java 측 조립. 총 4 query (tmpl 은 rsvTmplSeq 있는 경우만). */
   private List<OrderRsvExtRes> assemble(List<OrderRsv> rsvs) {
     List<Long> rsvSeqs = rsvs.stream().map(OrderRsv::getSeq).toList();
     Set<Short> storeSeqs = rsvs.stream().map(OrderRsv::getStoreSeq).collect(Collectors.toSet());
+    Set<Short> tmplSeqs =
+        rsvs.stream()
+            .map(OrderRsv::getRsvTmplSeq)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
 
     Map<Long, List<OrderRsvMenuExtRes>> menusByRsv =
         orderRsvMenuRepo.findExtsByRsvSeqs(rsvSeqs).stream()
@@ -201,17 +210,25 @@ public class OrderRsvService {
         storeRepo.findAllById(storeSeqs).stream()
             .collect(Collectors.toMap(Store::getSeq, Function.identity()));
 
+    Map<Short, String> tmplNmMap =
+        tmplSeqs.isEmpty()
+            ? Map.of()
+            : orderRsvTmplRepo.findAllById(tmplSeqs).stream()
+                .collect(Collectors.toMap(OrderRsvTmpl::getSeq, OrderRsvTmpl::getNm));
+
     return rsvs.stream()
         .map(
             r ->
                 toExtRes(
                     r,
                     storeMap.get(r.getStoreSeq()),
+                    r.getRsvTmplSeq() != null ? tmplNmMap.get(r.getRsvTmplSeq()) : null,
                     menusByRsv.getOrDefault(r.getSeq(), List.of())))
         .toList();
   }
 
-  private OrderRsvExtRes toExtRes(OrderRsv r, Store store, List<OrderRsvMenuExtRes> menus) {
+  private OrderRsvExtRes toExtRes(
+      OrderRsv r, Store store, String tmplNm, List<OrderRsvMenuExtRes> menus) {
     return new OrderRsvExtRes(
         r.getSeq(),
         r.getStoreSeq(),
@@ -224,7 +241,7 @@ public class OrderRsvService {
         r.getModAt(),
         store != null ? store.getNm() : null,
         store != null ? store.getCmt() : null,
-        null, // tmplNm — m_order_rsv_tmpl join 미구현 (추후)
+        tmplNm,
         menus);
   }
 
