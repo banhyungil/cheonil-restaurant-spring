@@ -84,47 +84,25 @@ public class PaymentService {
   }
 
   /* =========================================================
-   * Delete (cancel)
+   * Delete (cancel) — 주문 단위 일괄
    * ========================================================= */
 
   /**
-   * 단건 결제 취소.
+   * 주문 단위 결제 취소 (단건/다건 통합).
    *
-   * <p>분할 결제의 경우 한 row 만 취소되면 t_order.amount > sum(t_payment.amount) 가 되어 부분 미수 상태가 되므로, 분할 결제 row 가
-   * 있는 주문은 모든 row 를 함께 취소해야 함 → {@link #removeBatch} 사용 권장. 본 메서드는 단일 결제 row 가 있는 주문 또는 동일한 결과를
-   * 의도한 단순 취소만 처리.
+   * <p>한 주문의 모든 t_payment row 를 일괄 삭제 + status PAID → COOKED 복귀. 분할 결제도 안전하게 처리됨 (부분 취소로 amount 불일치
+   * 케이스 방지). 단건 취소는 {@code orderSeqs: [seq]} 로 호출.
    */
   @Transactional
-  public void remove(Long seq) {
-    Payment p = getPayment(seq);
-    Long orderSeq = p.getOrderSeq();
-    paymentRepo.delete(p);
-
-    // 같은 주문에 다른 결제 row 가 남아있다면 status 는 PAID 유지, 모두 사라졌으면 COOKED 복귀.
-    if (paymentRepo.findByOrderSeq(orderSeq).isEmpty()) {
+  public void removeByOrderSeqs(List<Long> orderSeqs) {
+    for (Long orderSeq : orderSeqs) {
+      List<Payment> payments = paymentRepo.findByOrderSeq(orderSeq);
+      if (payments.isEmpty()) {
+        throw new EntityNotFoundException("주문 " + orderSeq + " 에 결제 내역이 없습니다");
+      }
+      paymentRepo.deleteAll(payments);
       orderService.revertToCookedFromPaid(orderSeq);
     }
-  }
-
-  /** 다중 일괄 취소. */
-  @Transactional
-  public void removeBatch(List<Long> seqs) {
-    List<Payment> payments = paymentRepo.findBySeqIn(seqs);
-    if (payments.size() != seqs.size()) {
-      throw new EntityNotFoundException("일부 결제를 찾을 수 없음 (요청: " + seqs.size() + ", 조회: " + payments.size() + ")");
-    }
-    paymentRepo.deleteAll(payments);
-
-    // 각 주문에 대해 남은 결제 확인 후 status 복귀
-    payments.stream()
-        .map(Payment::getOrderSeq)
-        .distinct()
-        .forEach(
-            orderSeq -> {
-              if (paymentRepo.findByOrderSeq(orderSeq).isEmpty()) {
-                orderService.revertToCookedFromPaid(orderSeq);
-              }
-            });
   }
 
   /* =========================================================
@@ -135,12 +113,6 @@ public class PaymentService {
     return orderRepo
         .findById(seq)
         .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
-  }
-
-  private Payment getPayment(Long seq) {
-    return paymentRepo
-        .findById(seq)
-        .orElseThrow(() -> new EntityNotFoundException("payment " + seq + " not found"));
   }
 
   private void ensurePayable(Order order) {

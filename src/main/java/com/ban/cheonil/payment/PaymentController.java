@@ -6,23 +6,22 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ban.cheonil.payment.dto.PaymentBatchDeleteReq;
 import com.ban.cheonil.payment.dto.PaymentCreateReq;
 import com.ban.cheonil.payment.dto.PaymentRes;
 import com.ban.cheonil.payment.dto.PaymentSplitReq;
 
 import lombok.RequiredArgsConstructor;
 
+/** 결제는 주문의 sub-resource 로 {@code /orders/payments} prefix 사용. */
 @RestController
-@RequestMapping("/payments")
+@RequestMapping("/orders/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
@@ -47,17 +46,15 @@ public class PaymentController {
     return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createSplit(req));
   }
 
-  /** 단건 결제 취소. */
-  @DeleteMapping("/{seq}")
+  /**
+   * 결제 일괄 취소 — 주문 단위 (단건도 {@code orderSeqs: [seq]} 사용).
+   *
+   * <p>POST + body 인 이유: DELETE 는 일반적으로 body 사용을 지양하며 query string 의 배열 직렬화도 클라이언트마다 다름. POST + body
+   * 가 호환성 + 분할 결제 안전성 (한 주문의 모든 row 일괄) 측면에서 더 명확.
+   */
+  @PostMapping("/batch-delete")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void remove(@PathVariable Long seq) {
-    paymentService.remove(seq);
-  }
-
-  /** 다중 일괄 취소 — {@code ?seqs=1,2,3} 로 받음 (axios qs arrayFormat=comma). */
-  @DeleteMapping("/batch")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void removeBatch(@RequestParam List<Long> seqs) {
-    paymentService.removeBatch(seqs);
+  public void batchDelete(@Valid @RequestBody PaymentBatchDeleteReq req) {
+    paymentService.removeByOrderSeqs(req.orderSeqs());
   }
 }
