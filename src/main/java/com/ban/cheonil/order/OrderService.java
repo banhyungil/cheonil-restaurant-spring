@@ -191,6 +191,31 @@ public class OrderService {
   }
 
   /**
+   * 결제 취소 시 — PAID 주문을 COOKED 로 되돌림.
+   *
+   * <p>{@link #changeStatus} 의 일반 transition 룰은 PAID 에서의 전이를 막지만, 결제 취소는 정상 운영 절차이므로 별도 메서드로 분리.
+   * 호출자는 {@code com.ban.cheonil.payment.PaymentService} 의 결제 취소 흐름 안에서만 사용해야 한다.
+   */
+  @Transactional
+  public void revertToCookedFromPaid(Long seq) {
+    Order order =
+        orderRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
+    if (order.getStatus() != OrderStatus.PAID) {
+      throw new IllegalStateException(
+          "PAID 주문만 복귀(결제 취소) 가능 (현재: " + order.getStatus() + ")");
+    }
+    order.setStatus(OrderStatus.COOKED);
+    order.setModAt(OffsetDateTime.now());
+
+    OrderStatusChangeRes res =
+        new OrderStatusChangeRes(
+            order.getSeq(), order.getStatus(), order.getCookedAt(), order.getModAt());
+    eventPublisher.publishEvent(new OrderEvent.StatusChanged(res));
+  }
+
+  /**
    * 주문 전체 교체 (PUT 의미). 매장/비고/메뉴 항목을 새 값으로 바꾼다.
    *
    * <p>READY 상태에서만 허용 — 조리 시작 후엔 항목 변경 차단.
