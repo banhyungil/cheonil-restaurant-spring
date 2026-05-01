@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,10 +26,15 @@ import com.ban.cheonil.order.OrderMenuRepo;
 import com.ban.cheonil.order.OrderRepo;
 import com.ban.cheonil.order.dto.OrderMenuExtRes;
 import com.ban.cheonil.order.entity.Order;
+import com.ban.cheonil.order.entity.OrderMenu;
 import com.ban.cheonil.order.entity.OrderStatus;
+import com.ban.cheonil.order.sse.OrderEvent;
 import com.ban.cheonil.payment.PaymentRepo;
 import com.ban.cheonil.payment.entity.PayType;
 import com.ban.cheonil.payment.entity.Payment;
+import com.ban.cheonil.sales.dto.OrderRowRes;
+import com.ban.cheonil.sales.dto.OrdersParams;
+import com.ban.cheonil.sales.dto.OrdersSummaryRes;
 import com.ban.cheonil.sales.dto.PayMethodSummary;
 import com.ban.cheonil.sales.dto.SalesSummaryParams;
 import com.ban.cheonil.sales.dto.SalesSummaryRes;
@@ -60,6 +66,7 @@ public class SalesService {
   private final PaymentRepo paymentRepo;
   private final ExpenseRepo expenseRepo;
   private final StoreRepo storeRepo;
+  private final ApplicationEventPublisher eventPublisher;
 
   /* =========================================================
    * Summary KPI — 단일 날짜 + 전일 비교
@@ -116,6 +123,111 @@ public class SalesService {
         Specification.<Order>where((r, q, cb) -> cb.notEqual(r.get("status"), OrderStatus.PAID))
             .and(storeFilter(params.storeSeq()));
     return assembleTransactions(orderRepo.findAll(spec, pageable));
+  }
+
+  /* =========================================================
+   * Grid tab — orders / summary / remove
+   * ========================================================= */
+
+  /** 그리드 탭 거래 내역 — 클라 페이징 (전체 응답). UI 가드: 90일 초과 호출 금지. */
+  public List<OrderRowRes> findOrders(OrdersParams params) {
+    OffsetDateTime fromDt =
+        params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime toDt =
+        params.to().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+
+    Specification<Order> spec =
+        baseDateRange(new OffsetDateTime[] {fromDt, toDt})
+            .and(storeFilter(params.storeSeq()))
+            .and(menuFilter(params.menuSeq()))
+            .and(payTypeFilter(params.payType()));
+
+    List<Order> orders = orderRepo.findAll(spec, Sort.by(Sort.Direction.DESC, "orderAt"));
+    if (orders.isEmpty()) return List.of();
+
+    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
+    Set<Short> storeSeqs =
+        orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
+
+    Map<Long, List<Payment>> paymentsByOrder =
+        paymentRepo.findByOrderSeqIn(orderSeqs).stream()
+            .collect(Collectors.groupingBy(Payment::getOrderSeq));
+    Map<Short, Store> storeMap =
+        storeRepo.findAllById(storeSeqs).stream()
+            .collect(Collectors.toMap(Store::getSeq, Function.identity()));
+    Map<Long, List<OrderMenuExtRes>> menusByOrder =
+        orderMenuRepo.findExtsByOrderSeqs(orderSeqs).stream()
+            .collect(Collectors.groupingBy(OrderMenuExtRes::orderSeq));
+
+    return orders.stream()
+        .map(
+            o ->
+                toOrderRowRes(
+                    o,
+                    storeMap.get(o.getStoreSeq()),
+                    paymentsByOrder.getOrDefault(o.getSeq(), List.of()),
+                    menusByOrder.getOrDefault(o.getSeq(), List.of())))
+        .toList();
+  }
+
+  /** 그리드 탭 KPI 4 카드. */
+  public OrdersSummaryRes ordersSummary(OrdersParams params) {
+    OffsetDateTime fromDt =
+        params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime toDt =
+        params.to().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    int dayCount = (int) (params.to().toEpochDay() - params.from().toEpochDay() + 1);
+
+    Specification<Order> spec =
+        baseDateRange(new OffsetDateTime[] {fromDt, toDt})
+            .and(storeFilter(params.storeSeq()))
+            .and(menuFilter(params.menuSeq()))
+            .and(payTypeFilter(params.payType()));
+
+    List<Order> orders = orderRepo.findAll(spec);
+    int totalSales = orders.stream().mapToInt(Order::getAmount).sum();
+    int totalCount = orders.size();
+    int avgDailySales = dayCount > 0 ? totalSales / dayCount : 0;
+    int avgDailyCount = dayCount > 0 ? totalCount / dayCount : 0;
+
+    // 결제 분해 — 같은 필터 기간 내 t_payment, 이 주문들에 한정
+    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
+    List<Payment> payments =
+        orderSeqs.isEmpty() ? List.of() : paymentRepo.findByOrderSeqIn(orderSeqs);
+    PayMethodSummary cash = aggregateBy(payments, PayType.CASH);
+    PayMethodSummary card = aggregateBy(payments, PayType.CARD);
+
+    return new OrdersSummaryRes(totalSales, totalCount, avgDailySales, avgDailyCount, cash, card);
+  }
+
+  /**
+   * 다중 주문 삭제 — 회계 정정용.
+   *
+   * <p>{@link com.ban.cheonil.order.OrderService#remove} 와 달리 PAID 도 허용. cascade 처리:
+   *
+   * <ol>
+   *   <li>t_payment 삭제
+   *   <li>t_order_menu 삭제
+   *   <li>t_order 삭제
+   *   <li>SSE Removed 이벤트 발행
+   * </ol>
+   */
+  @Transactional
+  public void removeOrders(List<Long> orderSeqs) {
+    for (Long seq : orderSeqs) {
+      Order order =
+          orderRepo
+              .findById(seq)
+              .orElseThrow(
+                  () ->
+                      new jakarta.persistence.EntityNotFoundException(
+                          "order " + seq + " not found"));
+      List<Payment> payments = paymentRepo.findByOrderSeq(seq);
+      if (!payments.isEmpty()) paymentRepo.deleteAll(payments);
+      orderMenuRepo.deleteByIdOrderSeq(seq);
+      orderRepo.delete(order);
+      eventPublisher.publishEvent(new OrderEvent.Removed(seq));
+    }
   }
 
   /* =========================================================
@@ -207,6 +319,44 @@ public class SalesService {
   private Specification<Order> storeFilter(Short storeSeq) {
     if (storeSeq == null) return (r, q, cb) -> cb.conjunction();
     return (r, q, cb) -> cb.equal(r.get("storeSeq"), storeSeq);
+  }
+
+  /** 특정 메뉴를 포함하는 주문만 — t_order_menu sub-query 로 매칭. */
+  private Specification<Order> menuFilter(Short menuSeq) {
+    if (menuSeq == null) return (r, q, cb) -> cb.conjunction();
+    return (r, q, cb) -> {
+      Subquery<Long> sub = q.subquery(Long.class);
+      Root<OrderMenu> om = sub.from(OrderMenu.class);
+      sub.select(om.get("id").get("orderSeq"))
+          .where(cb.equal(om.get("id").get("menuSeq"), menuSeq));
+      return r.get("seq").in(sub);
+    };
+  }
+
+  /** {@link TransactionRes} 와 동일한 join 결과 + status / cmt 추가. */
+  private OrderRowRes toOrderRowRes(
+      Order o, Store store, List<Payment> payments, List<OrderMenuExtRes> menus) {
+    String menuSummary =
+        menus.stream()
+            .map(m -> m.menuNm() + " " + m.cnt())
+            .collect(Collectors.joining(", "));
+    int payAmount = payments.stream().mapToInt(Payment::getAmount).sum();
+    PayType payType = payments.isEmpty() ? null : payments.getFirst().getPayType();
+    OffsetDateTime payAt = payments.isEmpty() ? null : payments.getFirst().getPayAt();
+
+    return new OrderRowRes(
+        o.getSeq(),
+        o.getStoreSeq(),
+        store != null ? store.getNm() : null,
+        menuSummary,
+        o.getAmount(),
+        o.getOrderAt(),
+        o.getCookedAt(),
+        payType,
+        payAt,
+        payAmount,
+        o.getStatus(),
+        o.getCmt());
   }
 
   private Specification<Order> payTypeFilter(String payType) {
