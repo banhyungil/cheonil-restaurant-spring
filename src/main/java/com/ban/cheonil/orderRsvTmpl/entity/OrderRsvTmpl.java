@@ -66,6 +66,12 @@ public class OrderRsvTmpl {
   @Column(name = "active")
   private Boolean active;
 
+  /** true 면 스케줄러가 예약 생성 시 주문(t_order)도 즉시 생성. 신뢰 단골에 한해 활성화. */
+  @NotNull
+  @ColumnDefault("false")
+  @Column(name = "auto_order", nullable = false)
+  private Boolean autoOrder;
+
   @NotNull
   @ColumnDefault("(now())::date")
   @Column(name = "start_dt", nullable = false)

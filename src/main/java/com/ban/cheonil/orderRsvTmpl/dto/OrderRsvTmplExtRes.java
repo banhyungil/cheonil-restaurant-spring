@@ -17,6 +17,7 @@ public record OrderRsvTmplExtRes(
     List<DayType> dayTypes,
     String cmt,
     Boolean active,
+    Boolean autoOrder,
     LocalDate startDt,
     LocalDate endDt,
     OffsetDateTime regAt,

@@ -259,6 +259,7 @@ class OrderRsvTmplRepoTest {
     t.setRsvTime(rsvTime);
     t.setDayTypes(dayTypes);
     t.setActive(active);
+    t.setAutoOrder(false);
     t.setStartDt(startDt);
     t.setEndDt(endDt);
     return t;

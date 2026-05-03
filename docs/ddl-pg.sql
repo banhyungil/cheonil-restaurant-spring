@@ -256,6 +256,7 @@ create table public.m_order_rsv_tmpl
     day_types day_type[]                                     not null,
     cmt       varchar(1000),
     active    boolean                  default true,
+    auto_order boolean                 default false         not null,
     start_dt  date                     default (now())::date not null,
     end_dt    date,
     options   jsonb,

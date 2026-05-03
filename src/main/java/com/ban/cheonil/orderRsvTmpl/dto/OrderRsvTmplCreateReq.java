@@ -18,4 +18,6 @@ public record OrderRsvTmplCreateReq(
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDt,
     String cmt,
     Boolean active,
+    /** true 면 스케줄러가 예약 생성 시 주문(t_order)도 즉시 생성. null = false 처리. */
+    Boolean autoOrder,
     List<OrderRsvTmplMenuReq> menus) {}

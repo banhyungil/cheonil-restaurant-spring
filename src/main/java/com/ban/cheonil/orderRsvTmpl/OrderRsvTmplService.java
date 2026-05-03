@@ -55,6 +55,7 @@ public class OrderRsvTmplService {
     tmpl.setEndDt(req.endDt());
     tmpl.setCmt(req.cmt());
     tmpl.setActive(req.active() != null ? req.active() : Boolean.TRUE);
+    tmpl.setAutoOrder(req.autoOrder() != null ? req.autoOrder() : Boolean.FALSE);
     OffsetDateTime now = OffsetDateTime.now();
     tmpl.setRegAt(now);
     tmpl.setModAt(now);
@@ -108,6 +109,7 @@ public class OrderRsvTmplService {
     tmpl.setEndDt(req.endDt());
     tmpl.setCmt(req.cmt());
     if (req.active() != null) tmpl.setActive(req.active());
+    if (req.autoOrder() != null) tmpl.setAutoOrder(req.autoOrder());
     tmpl.setModAt(OffsetDateTime.now());
 
     orderRsvTmplMenuRepo.deleteByIdRsvTmplSeq(seq);
@@ -199,6 +201,7 @@ public class OrderRsvTmplService {
         toDayTypes(t.getDayTypes()),
         t.getCmt(),
         t.getActive(),
+        t.getAutoOrder(),
         t.getStartDt(),
         t.getEndDt(),
         t.getRegAt(),

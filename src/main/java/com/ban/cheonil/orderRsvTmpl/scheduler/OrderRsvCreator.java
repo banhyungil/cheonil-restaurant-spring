@@ -1,5 +1,7 @@
 package com.ban.cheonil.orderRsvTmpl.scheduler;
 
+import com.ban.cheonil.order.OrderService;
+import com.ban.cheonil.order.entity.Order;
 import com.ban.cheonil.orderRsv.OrderRsvMenuRepo;
 import com.ban.cheonil.orderRsv.OrderRsvRepo;
 import com.ban.cheonil.orderRsv.entity.OrderRsv;
@@ -32,6 +34,7 @@ public class OrderRsvCreator {
   private final OrderRsvRepo orderRsvRepo;
   private final OrderRsvMenuRepo orderRsvMenuRepo;
   private final OrderRsvTmplMenuRepo tmplMenuRepo;
+  private final OrderService orderService;
   private final Clock clock;
 
   /**
@@ -78,6 +81,15 @@ public class OrderRsvCreator {
                 })
             .toList();
     orderRsvMenuRepo.saveAll(rsvMenus);
+
+    // auto_order=true 면 주문(t_order) 도 즉시 생성 + 예약 status=COMPLETED 전환.
+    // OrderService.createFromRsv 가 SSE Created 이벤트도 함께 broadcast 하므로 주방 모니터에 즉시 표시됨.
+    if (Boolean.TRUE.equals(tmpl.getAutoOrder())) {
+      Order order = orderService.createFromRsv(saved, rsvMenus);
+      saved.setOrderSeq(order.getSeq());
+      saved.setStatus(RsvStatus.COMPLETED);
+      saved.setModAt(OffsetDateTime.now(clock));
+    }
 
     return true;
   }
