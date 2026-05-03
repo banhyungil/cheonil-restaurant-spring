@@ -3,6 +3,7 @@ package com.ban.cheonil.orderRsvTmpl;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplCreateReq;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplExtRes;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplPatchActiveReq;
+import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplPatchAutoOrderReq;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplsListParams;
 import com.ban.cheonil.orderRsvTmpl.scheduler.OrderRsvSchedulerService;
 import java.time.OffsetDateTime;
@@ -63,6 +64,14 @@ public class OrderRsvTmplController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void patchActive(@PathVariable Short seq, @RequestBody OrderRsvTmplPatchActiveReq req) {
     orderRsvTmplService.patchActive(seq, req.active());
+  }
+
+  /** 자동 주문 토글 — true 면 스케줄러가 예약 생성 시 주문(t_order) 도 즉시 생성. */
+  @PatchMapping("/{seq}/auto-order")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void patchAutoOrder(
+      @PathVariable Short seq, @RequestBody OrderRsvTmplPatchAutoOrderReq req) {
+    orderRsvTmplService.patchAutoOrder(seq, req.autoOrder());
   }
 
   /** 템플릿 삭제. 연결된 인스턴스는 DB 가 rsv_tmpl_seq=NULL 처리 (FK ON DELETE SET NULL 가정). */

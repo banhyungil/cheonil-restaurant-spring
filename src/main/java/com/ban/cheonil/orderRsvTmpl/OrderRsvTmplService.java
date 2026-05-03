@@ -129,6 +129,17 @@ public class OrderRsvTmplService {
     tmpl.setModAt(OffsetDateTime.now());
   }
 
+  /** 자동 주문 토글 — PATCH /auto-order. true 면 스케줄러가 예약 생성 시 주문(t_order) 도 즉시 생성. */
+  @Transactional
+  public void patchAutoOrder(Short seq, Boolean autoOrder) {
+    OrderRsvTmpl tmpl =
+        orderRsvTmplRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("orderRsvTmpl " + seq + " not found"));
+    tmpl.setAutoOrder(autoOrder);
+    tmpl.setModAt(OffsetDateTime.now());
+  }
+
   /* =========================================================
    * Delete
    * ========================================================= */
