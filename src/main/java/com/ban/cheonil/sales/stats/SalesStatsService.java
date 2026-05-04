@@ -37,6 +37,8 @@ import com.ban.cheonil.sales.stats.dto.MenuRank;
 import com.ban.cheonil.sales.stats.dto.PayMethodPart;
 import com.ban.cheonil.sales.stats.dto.StatsBasicRes;
 import com.ban.cheonil.sales.stats.dto.StatsGranularity;
+import com.ban.cheonil.sales.stats.dto.StatsHourMenuStack;
+import com.ban.cheonil.sales.stats.dto.StatsHourMenuStack.HourMenuStack;
 import com.ban.cheonil.sales.stats.dto.StatsMenuRes;
 import com.ban.cheonil.sales.stats.dto.StatsStoreParams;
 import com.ban.cheonil.sales.stats.dto.StatsStoreRes;
@@ -129,7 +131,7 @@ public class SalesStatsService {
   }
 
   /* =========================================================
-   * Menu — TOP 10 / 카테고리별 / 결제별 인기 / 피크타임
+   * Menu — 수량 TOP 10 / 판매액 TOP 10 / 카테고리별 / 시간대별 평균 메뉴 개수
    * ========================================================= */
 
   public StatsMenuRes menu(DateRangeParams params) {
@@ -137,32 +139,11 @@ public class SalesStatsService {
     List<Order> orders = orderRepo.findAll(rangeSpec(cur));
 
     List<MenuRank> menusTop10 = topMenusByCount(orders, 10);
+    List<MenuRank> menusTop10ByAmount = topMenusByAmount(orders, 10);
     List<CategoryPart> categoryParts = aggregateCategoryParts(orders);
+    StatsHourMenuStack hourlyMenuStack = aggregateHourMenuStack(orders);
 
-    // 결제수단별 인기 — orders 를 payType 으로 분류
-    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
-    Map<Long, List<Payment>> paymentsByOrder =
-        orderSeqs.isEmpty()
-            ? Map.of()
-            : paymentRepo.findByOrderSeqIn(orderSeqs).stream()
-                .collect(Collectors.groupingBy(Payment::getOrderSeq));
-
-    List<Order> cashOrders =
-        orders.stream()
-            .filter(o -> hasPayType(paymentsByOrder.get(o.getSeq()), PayType.CASH))
-            .toList();
-    List<Order> cardOrders =
-        orders.stream()
-            .filter(o -> hasPayType(paymentsByOrder.get(o.getSeq()), PayType.CARD))
-            .toList();
-    List<Order> peakOrders = orders.stream().filter(o -> o.getOrderAt().getHour() == 12).toList();
-
-    return new StatsMenuRes(
-        menusTop10,
-        categoryParts,
-        topMenusByCount(cashOrders, 5),
-        topMenusByCount(cardOrders, 5),
-        topMenusByCount(peakOrders, 5));
+    return new StatsMenuRes(menusTop10, menusTop10ByAmount, categoryParts, hourlyMenuStack);
   }
 
   /* =========================================================
@@ -323,8 +304,18 @@ public class SalesStatsService {
         new PayMethodPart("UNPAID", unpaid, percent(unpaid, total)));
   }
 
+  /** menu amount 기준 TOP N — count 도 함께 집계. {@link #topMenusByCount} 와 정렬 기준만 다름. */
+  private List<MenuRank> topMenusByAmount(List<Order> orders, int limit) {
+    return rankMenus(orders, Comparator.comparingInt((MenuAcc a) -> a.amount).reversed(), limit);
+  }
+
   /** menu count 기준 TOP N. amount 도 함께 집계. */
   private List<MenuRank> topMenusByCount(List<Order> orders, int limit) {
+    return rankMenus(orders, Comparator.comparingInt((MenuAcc a) -> a.count).reversed(), limit);
+  }
+
+  /** 공통 — 주문들에서 메뉴별 (count, amount) 누적 후 정렬/limit. */
+  private List<MenuRank> rankMenus(List<Order> orders, Comparator<MenuAcc> comparator, int limit) {
     if (orders.isEmpty()) return List.of();
     List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
     List<OrderMenuExtRes> items = orderMenuRepo.findExtsByOrderSeqs(orderSeqs);
@@ -336,10 +327,73 @@ public class SalesStatsService {
       acc.amount += om.price() * om.cnt();
     }
     return accMap.values().stream()
-        .sorted(Comparator.comparingInt((MenuAcc a) -> a.count).reversed())
+        .sorted(comparator)
         .limit(limit)
         .map(a -> new MenuRank(a.nm, a.count, a.amount))
         .toList();
+  }
+
+  /**
+   * 시간대별 메뉴 판매 stacked — 시간 × 메뉴 cross-tab.
+   *
+   * <p>전체 기간 수량 TOP 5 메뉴 추출 + 그 외 "기타" 합산. 각 hour 별로 [TOP1, TOP2, ..., TOP5, 기타] 순서의 cnt 배열을
+   * counts 로 노출.
+   */
+  private StatsHourMenuStack aggregateHourMenuStack(List<Order> orders) {
+    if (orders.isEmpty()) return new StatsHourMenuStack(List.of(), List.of());
+    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
+    List<OrderMenuExtRes> items = orderMenuRepo.findExtsByOrderSeqs(orderSeqs);
+    if (items.isEmpty()) return new StatsHourMenuStack(List.of(), List.of());
+
+    // 1. 전체 기간 menu count 누적 → TOP 5 추출
+    Map<Short, MenuAcc> totalAcc = new java.util.HashMap<>();
+    for (OrderMenuExtRes om : items) {
+      MenuAcc acc = totalAcc.computeIfAbsent(om.menuSeq(), k -> new MenuAcc(om.menuNm()));
+      acc.count += om.cnt();
+    }
+    List<Map.Entry<Short, MenuAcc>> sorted =
+        totalAcc.entrySet().stream()
+            .sorted(
+                Comparator.<Map.Entry<Short, MenuAcc>>comparingInt(e -> e.getValue().count)
+                    .reversed())
+            .toList();
+    List<Map.Entry<Short, MenuAcc>> top5 = sorted.stream().limit(5).toList();
+    boolean hasEtc = sorted.size() > 5;
+
+    // menus 라벨 순서 (TOP1 → TOP5 → "기타")
+    List<String> menuNames = new java.util.ArrayList<>(top5.stream().map(e -> e.getValue().nm).toList());
+    if (hasEtc) menuNames.add("기타");
+    int slots = menuNames.size();
+
+    // 2. menuSeq → slot 인덱스
+    Map<Short, Integer> menuToSlot = new java.util.HashMap<>();
+    for (int i = 0; i < top5.size(); i++) menuToSlot.put(top5.get(i).getKey(), i);
+    int etcSlot = top5.size();
+
+    // 3. orderSeq → hour
+    Map<Long, Integer> hourByOrder =
+        orders.stream().collect(Collectors.toMap(Order::getSeq, o -> o.getOrderAt().getHour()));
+
+    // 4. hour → int[slots] 누적
+    Map<Integer, int[]> hourCounts = new TreeMap<>();
+    for (OrderMenuExtRes om : items) {
+      Integer hour = hourByOrder.get(om.orderSeq());
+      if (hour == null) continue;
+      int[] arr = hourCounts.computeIfAbsent(hour, k -> new int[slots]);
+      Integer slot = menuToSlot.get(om.menuSeq());
+      int s = slot != null ? slot : (hasEtc ? etcSlot : -1);
+      if (s >= 0) arr[s] += om.cnt();
+    }
+
+    List<HourMenuStack> hours =
+        hourCounts.entrySet().stream()
+            .map(
+                e ->
+                    new HourMenuStack(
+                        e.getKey(),
+                        java.util.Arrays.stream(e.getValue()).boxed().toList()))
+            .toList();
+    return new StatsHourMenuStack(menuNames, hours);
   }
 
   private List<CategoryPart> aggregateCategoryParts(List<Order> orders) {
@@ -441,11 +495,6 @@ public class SalesStatsService {
       result.add(new StoreMenuPart(ss, top4, etcCount));
     }
     return result;
-  }
-
-  private boolean hasPayType(List<Payment> payments, PayType type) {
-    if (payments == null || payments.isEmpty()) return false;
-    return payments.stream().anyMatch(p -> p.getPayType() == type);
   }
 
   private double percent(int part, int total) {
