@@ -8,7 +8,7 @@ public record StatsBasicRes(
     Integer prevSales,
     Integer totalCount,
     Integer prevCount,
-    List<HourBucket> hourly,
+    List<HourBucket> hourlys,
     List<StoreSales> storesTop5,
     List<PayMethodPart> payParts,
     List<MenuRank> menusTop5) {}

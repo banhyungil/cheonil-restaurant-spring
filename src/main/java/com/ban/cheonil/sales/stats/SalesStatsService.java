@@ -56,8 +56,8 @@ import lombok.RequiredArgsConstructor;
 /**
  * 통계 서비스 — 주문내역관리 페이지의 통계 탭 4 endpoint 처리.
  *
- * <p>접근 방식: SQL 집계 대신 기간 내 주문 + 결제 + 메뉴 한번에 fetch 후 Java 스트림으로 집계. POS 규모 (월~연 단위에도 ~수만 row)
- * 에선 인메모리 처리가 충분하고 코드도 단순.
+ * <p>접근 방식: SQL 집계 대신 기간 내 주문 + 결제 + 메뉴 한번에 fetch 후 Java 스트림으로 집계. POS 규모 (월~연 단위에도 ~수만 row) 에선
+ * 인메모리 처리가 충분하고 코드도 단순.
  */
 @Service
 @RequiredArgsConstructor
@@ -91,7 +91,7 @@ public class SalesStatsService {
             .collect(
                 Collectors.groupingBy(
                     o -> o.getOrderAt().getHour(), Collectors.summingInt(Order::getAmount)));
-    List<HourBucket> hourly =
+    List<HourBucket> hourlys =
         IntStream.rangeClosed(9, 20)
             .mapToObj(h -> new HourBucket(h, hourMap.getOrDefault(h, 0)))
             .toList();
@@ -101,7 +101,13 @@ public class SalesStatsService {
     List<MenuRank> menusTop5 = topMenusByCount(orders, 5);
 
     return new StatsBasicRes(
-        totalSales, prevSales, totalCount, (int) prevCount, hourly, storesTop5, payParts,
+        totalSales,
+        prevSales,
+        totalCount,
+        (int) prevCount,
+        hourlys,
+        storesTop5,
+        payParts,
         menusTop5);
   }
 
@@ -149,8 +155,7 @@ public class SalesStatsService {
         orders.stream()
             .filter(o -> hasPayType(paymentsByOrder.get(o.getSeq()), PayType.CARD))
             .toList();
-    List<Order> peakOrders =
-        orders.stream().filter(o -> o.getOrderAt().getHour() == 12).toList();
+    List<Order> peakOrders = orders.stream().filter(o -> o.getOrderAt().getHour() == 12).toList();
 
     return new StatsMenuRes(
         menusTop10,
@@ -239,8 +244,7 @@ public class SalesStatsService {
     // 점포별 메뉴 비중 — params.storeSeq() 가 있으면 그 점포만, 없으면 전체 점포
     List<StoreMenuPart> storeMenuParts = computeStoreMenuParts(orders, params.storeSeq());
 
-    return new StatsStoreRes(
-        stores, storeMenuParts, orderCounts, unpaidByStore, payDistribution);
+    return new StatsStoreRes(stores, storeMenuParts, orderCounts, unpaidByStore, payDistribution);
   }
 
   /* =========================================================
