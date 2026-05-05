@@ -45,7 +45,7 @@ import com.ban.cheonil.sales.stats.dto.StatsStoreRes;
 import com.ban.cheonil.sales.stats.dto.StatsTrendParams;
 import com.ban.cheonil.sales.stats.dto.StatsTrendRes;
 import com.ban.cheonil.sales.stats.dto.StoreCount;
-import com.ban.cheonil.sales.stats.dto.StoreMenuPart;
+import com.ban.cheonil.sales.stats.dto.StoreMenuMix;
 import com.ban.cheonil.sales.stats.dto.StorePayDistribution;
 import com.ban.cheonil.sales.stats.dto.StoreSales;
 import com.ban.cheonil.sales.stats.dto.StoreUnpaid;
@@ -222,10 +222,10 @@ public class SalesStatsService {
                         e.getValue()[2]))
             .toList();
 
-    // 점포별 메뉴 비중 — params.storeSeq() 가 있으면 그 점포만, 없으면 전체 점포
-    List<StoreMenuPart> storeMenuParts = computeStoreMenuParts(orders, params.storeSeq());
+    // 점포별 메뉴 mix — 모든 매장 반환, frontend 가 multi-select 로 표시 매장 선택
+    List<StoreMenuMix> storeMenuMixes = computeStoreMenuMixes(orders, storeEntities);
 
-    return new StatsStoreRes(stores, storeMenuParts, orderCounts, unpaidByStore, payDistribution);
+    return new StatsStoreRes(stores, storeMenuMixes, orderCounts, unpaidByStore, payDistribution);
   }
 
   /* =========================================================
@@ -460,18 +460,19 @@ public class SalesStatsService {
     };
   }
 
-  private List<StoreMenuPart> computeStoreMenuParts(List<Order> orders, Short storeSeqFilter) {
-    List<Order> targetOrders =
-        storeSeqFilter == null
-            ? orders
-            : orders.stream().filter(o -> o.getStoreSeq().equals(storeSeqFilter)).toList();
-    if (targetOrders.isEmpty()) return List.of();
+  /**
+   * 모든 매장의 메뉴 mix — 매장당 자체 TOP 5 + 기타. frontend 의 multi-select donut grid 용.
+   *
+   * <p>기존 {@code computeStoreMenuParts} 와 다른 점: storeSeq 필터 제거 (전체 매장), TOP 4 → TOP 5, storeNm 포함.
+   */
+  private List<StoreMenuMix> computeStoreMenuMixes(
+      List<Order> orders, Map<Short, Store> storeEntities) {
+    if (orders.isEmpty()) return List.of();
 
-    // 점포별 그룹핑
     Map<Short, List<Order>> byStore =
-        targetOrders.stream().collect(Collectors.groupingBy(Order::getStoreSeq));
+        orders.stream().collect(Collectors.groupingBy(Order::getStoreSeq));
 
-    List<StoreMenuPart> result = new java.util.ArrayList<>();
+    List<StoreMenuMix> result = new java.util.ArrayList<>();
     for (Map.Entry<Short, List<Order>> e : byStore.entrySet()) {
       Short ss = e.getKey();
       List<Long> orderSeqs = e.getValue().stream().map(Order::getSeq).toList();
@@ -484,15 +485,15 @@ public class SalesStatsService {
         acc.count += om.cnt();
       }
       int totalCount = accMap.values().stream().mapToInt(a -> a.count).sum();
-      List<StoreMenuPart.Item> top4 =
+      List<StoreMenuMix.Item> top5 =
           accMap.values().stream()
               .sorted(Comparator.comparingInt((MenuAcc a) -> a.count).reversed())
-              .limit(4)
-              .map(a -> new StoreMenuPart.Item(a.nm, a.count, percent(a.count, totalCount)))
+              .limit(5)
+              .map(a -> new StoreMenuMix.Item(a.nm, a.count, percent(a.count, totalCount)))
               .toList();
-      int top4Count = top4.stream().mapToInt(StoreMenuPart.Item::count).sum();
-      int etcCount = totalCount - top4Count;
-      result.add(new StoreMenuPart(ss, top4, etcCount));
+      int top5Count = top5.stream().mapToInt(StoreMenuMix.Item::count).sum();
+      int etcCount = totalCount - top5Count;
+      result.add(new StoreMenuMix(ss, storeNm(storeEntities, ss), top5, etcCount));
     }
     return result;
   }
