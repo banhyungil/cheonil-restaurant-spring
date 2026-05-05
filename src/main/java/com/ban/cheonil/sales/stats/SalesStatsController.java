@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ban.cheonil.sales.stats.dto.DateRangeParams;
 import com.ban.cheonil.sales.stats.dto.StatsBasicRes;
 import com.ban.cheonil.sales.stats.dto.StatsMenuRes;
-import com.ban.cheonil.sales.stats.dto.StatsStoreParams;
 import com.ban.cheonil.sales.stats.dto.StatsStoreRes;
 import com.ban.cheonil.sales.stats.dto.StatsTrendParams;
 import com.ban.cheonil.sales.stats.dto.StatsTrendRes;
@@ -43,9 +42,9 @@ public class SalesStatsController {
     return salesStatsService.menu(params);
   }
 
-  /** 통계 - 점포 분석 뷰. storeSeq 미지정 시 모든 점포의 메뉴 비중 포함. */
+  /** 통계 - 점포 분석 뷰. 모든 점포 데이터 반환 — frontend 가 multi-select 로 표시 매장 선택. */
   @GetMapping("/store")
-  public StatsStoreRes store(@Valid @ModelAttribute StatsStoreParams params) {
+  public StatsStoreRes store(@Valid @ModelAttribute DateRangeParams params) {
     return salesStatsService.store(params);
   }
 }

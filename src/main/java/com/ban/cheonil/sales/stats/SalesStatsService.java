@@ -40,15 +40,13 @@ import com.ban.cheonil.sales.stats.dto.StatsGranularity;
 import com.ban.cheonil.sales.stats.dto.StatsHourMenuStack;
 import com.ban.cheonil.sales.stats.dto.StatsHourMenuStack.HourMenuStack;
 import com.ban.cheonil.sales.stats.dto.StatsMenuRes;
-import com.ban.cheonil.sales.stats.dto.StatsStoreParams;
 import com.ban.cheonil.sales.stats.dto.StatsStoreRes;
 import com.ban.cheonil.sales.stats.dto.StatsTrendParams;
 import com.ban.cheonil.sales.stats.dto.StatsTrendRes;
 import com.ban.cheonil.sales.stats.dto.StoreCount;
+import com.ban.cheonil.sales.stats.dto.StoreHourHeatmap;
 import com.ban.cheonil.sales.stats.dto.StoreMenuMix;
-import com.ban.cheonil.sales.stats.dto.StorePayDistribution;
 import com.ban.cheonil.sales.stats.dto.StoreSales;
-import com.ban.cheonil.sales.stats.dto.StoreUnpaid;
 import com.ban.cheonil.sales.stats.dto.TrendPoint;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
@@ -150,7 +148,7 @@ public class SalesStatsService {
    * Store — 점포별 매출/메뉴 비중/주문 빈도/미수/결제분포
    * ========================================================= */
 
-  public StatsStoreRes store(StatsStoreParams params) {
+  public StatsStoreRes store(DateRangeParams params) {
     OffsetDateTime[] cur = dayRange(params.from(), params.to());
     List<Order> orders = orderRepo.findAll(rangeSpec(cur));
 
@@ -170,62 +168,13 @@ public class SalesStatsService {
                         e.getKey(), storeNm(storeEntities, e.getKey()), e.getValue().intValue()))
             .toList();
 
-    // 점포별 미수
-    Map<Short, int[]> unpaidAcc =
-        orders.stream()
-            .filter(o -> o.getStatus() != OrderStatus.PAID)
-            .collect(
-                Collectors.toMap(
-                    Order::getStoreSeq,
-                    o -> new int[] {o.getAmount(), 1},
-                    (a, b) -> new int[] {a[0] + b[0], a[1] + b[1]}));
-    List<StoreUnpaid> unpaidByStore =
-        unpaidAcc.entrySet().stream()
-            .map(
-                e ->
-                    new StoreUnpaid(
-                        e.getKey(),
-                        storeNm(storeEntities, e.getKey()),
-                        e.getValue()[0],
-                        e.getValue()[1]))
-            .toList();
-
-    // 결제 분포 — 점포별 cash / card / unpaid 합계
-    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
-    Map<Long, List<Payment>> paymentsByOrder =
-        orderSeqs.isEmpty()
-            ? Map.of()
-            : paymentRepo.findByOrderSeqIn(orderSeqs).stream()
-                .collect(Collectors.groupingBy(Payment::getOrderSeq));
-    Map<Short, int[]> distAcc = new java.util.HashMap<>(); // [cash, card, unpaid]
-    for (Order o : orders) {
-      int[] acc = distAcc.computeIfAbsent(o.getStoreSeq(), k -> new int[3]);
-      List<Payment> ps = paymentsByOrder.getOrDefault(o.getSeq(), List.of());
-      if (ps.isEmpty()) {
-        acc[2] += o.getAmount();
-      } else {
-        for (Payment p : ps) {
-          if (p.getPayType() == PayType.CASH) acc[0] += p.getAmount();
-          else if (p.getPayType() == PayType.CARD) acc[1] += p.getAmount();
-        }
-      }
-    }
-    List<StorePayDistribution> payDistribution =
-        distAcc.entrySet().stream()
-            .map(
-                e ->
-                    new StorePayDistribution(
-                        e.getKey(),
-                        storeNm(storeEntities, e.getKey()),
-                        e.getValue()[0],
-                        e.getValue()[1],
-                        e.getValue()[2]))
-            .toList();
-
     // 점포별 메뉴 mix — 모든 매장 반환, frontend 가 multi-select 로 표시 매장 선택
     List<StoreMenuMix> storeMenuMixes = computeStoreMenuMixes(orders, storeEntities);
 
-    return new StatsStoreRes(stores, storeMenuMixes, orderCounts, unpaidByStore, payDistribution);
+    // 시간×매장 heatmap — 모든 매장 9~20 시간대 0 채움
+    List<StoreHourHeatmap> storeHourHeatmap = aggregateStoreHourHeatmap(orders, storeEntities);
+
+    return new StatsStoreRes(stores, storeMenuMixes, orderCounts, storeHourHeatmap);
   }
 
   /* =========================================================
@@ -458,6 +407,40 @@ public class SalesStatsService {
       }
       case month -> String.format(Locale.ROOT, "%02d월", d.getMonthValue());
     };
+  }
+
+  /**
+   * 시간×매장 heatmap — 각 매장의 9~20 시간대 주문 건수.
+   *
+   * <p>모든 매장에 대해 동일한 hour bucket 셋 (9~20) 을 가짐 (해당 시간 미주문이면 0). 모든 매장 반환 → frontend 가
+   * multi-select 로 표시 매장 선택.
+   */
+  private List<StoreHourHeatmap> aggregateStoreHourHeatmap(
+      List<Order> orders, Map<Short, Store> storeEntities) {
+    if (orders.isEmpty()) return List.of();
+
+    // storeSeq → hour → 주문 건수
+    Map<Short, Map<Integer, Long>> grouped =
+        orders.stream()
+            .collect(
+                Collectors.groupingBy(
+                    Order::getStoreSeq,
+                    Collectors.groupingBy(o -> o.getOrderAt().getHour(), Collectors.counting())));
+
+    return grouped.entrySet().stream()
+        .map(
+            e -> {
+              Map<Integer, Long> hourMap = e.getValue();
+              List<StoreHourHeatmap.HourCount> hourly =
+                  IntStream.rangeClosed(9, 20)
+                      .mapToObj(
+                          h ->
+                              new StoreHourHeatmap.HourCount(
+                                  h, hourMap.getOrDefault(h, 0L).intValue()))
+                      .toList();
+              return new StoreHourHeatmap(e.getKey(), storeNm(storeEntities, e.getKey()), hourly);
+            })
+        .toList();
   }
 
   /**

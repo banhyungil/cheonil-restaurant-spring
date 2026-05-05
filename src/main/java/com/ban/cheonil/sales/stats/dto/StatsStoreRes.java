@@ -7,5 +7,4 @@ public record StatsStoreRes(
     List<StoreSales> stores,
     List<StoreMenuMix> storeMenuMixes,
     List<StoreCount> orderCounts,
-    List<StoreUnpaid> unpaidByStore,
-    List<StorePayDistribution> payDistribution) {}
+    List<StoreHourHeatmap> storeHourHeatmap) {}

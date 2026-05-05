@@ -20,13 +20,10 @@ public interface OrderRepo extends JpaRepository<Order, Long>, JpaSpecificationE
   /** 멱등성 체크 — 특정 예약(rsvSeq) 으로 이미 t_order 가 생성됐는지. */
   boolean existsByRsvSeq(Long rsvSeq);
 
-  /** 정산 KPI — 기간 내 주문 amount 합계. row 0건이면 null 반환 (서비스 단에서 0 처리). */
+  /** 정산 KPI — 기간 내 주문 amount 합계. coalesce 로 항상 정수 반환 (0 fallback). */
   @Query(
       "select coalesce(sum(o.amount), 0) from Order o "
           + "where o.orderAt >= :from and o.orderAt < :to")
   Integer sumAmountByOrderAtRange(
       @Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
-
-  /** 미수 주문 — status != PAID. 정산 KPI 의 unpaid 카드용 (날짜 무관 전체 미수). */
-  List<Order> findByStatusNot(OrderStatus status);
 }
