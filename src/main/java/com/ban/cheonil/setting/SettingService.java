@@ -1,6 +1,7 @@
 package com.ban.cheonil.setting;
 
 import com.ban.cheonil.setting.dto.SettingRes;
+import com.ban.cheonil.setting.entity.OperatingHours;
 import com.ban.cheonil.setting.entity.Setting;
 import com.ban.cheonil.setting.entity.SettingCode;
 import jakarta.persistence.EntityNotFoundException;
@@ -42,6 +43,27 @@ public class SettingService {
     s.setUserConfig(null);
     s.setModAt(OffsetDateTime.now());
     return SettingRes.from(s);
+  }
+
+  /**
+   * 가게 운영시간 — typed view. setting row 누락 / config 필드 누락 시 {@link OperatingHours#DEFAULT} fallback.
+   *
+   * <p>backend 가 직접 소비하는 setting 이라 raw Map cast 보일러플레이트 회피를 위해 typed 헬퍼 노출.
+   */
+  public OperatingHours getOperatingHours() {
+    return settingRepo
+        .findById(SettingCode.OPERATING_HOURS)
+        .map(
+            s -> {
+              Map<String, Object> cfg = s.getEffectiveConfig();
+              if (cfg == null) return OperatingHours.DEFAULT;
+              Object start = cfg.get("startHour");
+              Object end = cfg.get("endHour");
+              if (!(start instanceof Number) || !(end instanceof Number))
+                return OperatingHours.DEFAULT;
+              return new OperatingHours(((Number) start).intValue(), ((Number) end).intValue());
+            })
+        .orElse(OperatingHours.DEFAULT);
   }
 
   private Setting get(SettingCode code) {

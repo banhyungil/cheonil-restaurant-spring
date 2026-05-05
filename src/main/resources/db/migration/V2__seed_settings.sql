@@ -9,5 +9,6 @@ insert into m_setting (code, default_config) values
     ('STORE_ORDER',          '{"order": []}'::jsonb),
     ('MENU_ORDER',           '{"order": []}'::jsonb),
     ('STORE_CATEGORY_ORDER', '{"order": []}'::jsonb),
-    ('MENU_CATEGORY_ORDER',  '{"order": []}'::jsonb)
+    ('MENU_CATEGORY_ORDER',  '{"order": []}'::jsonb),
+    ('OPERATING_HOURS',      '{"startHour": 5, "endHour": 16}'::jsonb)
 on conflict (code) do nothing;

@@ -22,4 +22,11 @@ public enum SettingCode {
 
   /** 메뉴 카테고리 표시 순서. config: {"order": [ctgSeq, ...]}. */
   MENU_CATEGORY_ORDER,
+
+  /**
+   * 가게 운영시간 — 통계 시간대 분석 (시간대별 매출 / heatmap 등) bucket 범위.
+   *
+   * <p>config: {@code {"startHour": 9, "endHour": 20}} (양 끝 inclusive). backend 가 직접 소비.
+   */
+  OPERATING_HOURS,
 }

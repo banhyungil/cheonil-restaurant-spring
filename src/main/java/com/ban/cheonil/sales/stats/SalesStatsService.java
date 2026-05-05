@@ -30,6 +30,8 @@ import com.ban.cheonil.order.entity.OrderStatus;
 import com.ban.cheonil.payment.PaymentRepo;
 import com.ban.cheonil.payment.entity.PayType;
 import com.ban.cheonil.payment.entity.Payment;
+import com.ban.cheonil.setting.SettingService;
+import com.ban.cheonil.setting.entity.OperatingHours;
 import com.ban.cheonil.sales.stats.dto.CategoryPart;
 import com.ban.cheonil.sales.stats.dto.DateRangeParams;
 import com.ban.cheonil.sales.stats.dto.HourBucket;
@@ -70,6 +72,7 @@ public class SalesStatsService {
   private final StoreRepo storeRepo;
   private final MenuRepo menuRepo;
   private final MenuCategoryRepo menuCategoryRepo;
+  private final SettingService settingService;
 
   /* =========================================================
    * Basic — 시간대 / 점포 TOP 5 / 결제유형 / 메뉴 TOP 5
@@ -85,14 +88,15 @@ public class SalesStatsService {
     int prevSales = orderRepo.sumAmountByOrderAtRange(prev[0], prev[1]);
     long prevCount = orderRepo.count(rangeSpec(prev));
 
-    // hourly 9~20시
+    // hourly — 운영시간 setting 기반 bucket
+    OperatingHours hours = settingService.getOperatingHours();
     Map<Integer, Integer> hourMap =
         orders.stream()
             .collect(
                 Collectors.groupingBy(
                     o -> o.getOrderAt().getHour(), Collectors.summingInt(Order::getAmount)));
     List<HourBucket> hourlys =
-        IntStream.rangeClosed(9, 20)
+        IntStream.rangeClosed(hours.startHour(), hours.endHour())
             .mapToObj(h -> new HourBucket(h, hourMap.getOrDefault(h, 0)))
             .toList();
 
@@ -412,12 +416,14 @@ public class SalesStatsService {
   /**
    * 시간×매장 heatmap — 각 매장의 9~20 시간대 주문 건수.
    *
-   * <p>모든 매장에 대해 동일한 hour bucket 셋 (9~20) 을 가짐 (해당 시간 미주문이면 0). 모든 매장 반환 → frontend 가
-   * multi-select 로 표시 매장 선택.
+   * <p>모든 매장에 대해 동일한 hour bucket 셋 ({@link OperatingHours} 기반) 을 가짐 (해당 시간 미주문이면 0). 모든 매장 반환 →
+   * frontend 가 multi-select 로 표시 매장 선택.
    */
   private List<StoreHourHeatmap> aggregateStoreHourHeatmap(
       List<Order> orders, Map<Short, Store> storeEntities) {
     if (orders.isEmpty()) return List.of();
+
+    OperatingHours hours = settingService.getOperatingHours();
 
     // storeSeq → hour → 주문 건수
     Map<Short, Map<Integer, Long>> grouped =
@@ -432,7 +438,7 @@ public class SalesStatsService {
             e -> {
               Map<Integer, Long> hourMap = e.getValue();
               List<StoreHourHeatmap.HourCount> hourly =
-                  IntStream.rangeClosed(9, 20)
+                  IntStream.rangeClosed(hours.startHour(), hours.endHour())
                       .mapToObj(
                           h ->
                               new StoreHourHeatmap.HourCount(

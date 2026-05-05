@@ -25,7 +25,8 @@ insert into public.m_setting (code, default_config)
 values ('STORE_ORDER',          '{"order": []}'::jsonb),
        ('MENU_ORDER',            '{"order": []}'::jsonb),
        ('STORE_CATEGORY_ORDER',  '{"order": []}'::jsonb),
-       ('MENU_CATEGORY_ORDER',   '{"order": []}'::jsonb)
+       ('MENU_CATEGORY_ORDER',   '{"order": []}'::jsonb),
+       ('OPERATING_HOURS',       '{"startHour": 9, "endHour": 20}'::jsonb)
 on conflict (code) do nothing;
 
 create table public.m_store_category
