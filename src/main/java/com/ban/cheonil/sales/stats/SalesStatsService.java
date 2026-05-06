@@ -30,8 +30,6 @@ import com.ban.cheonil.order.entity.OrderStatus;
 import com.ban.cheonil.payment.PaymentRepo;
 import com.ban.cheonil.payment.entity.PayType;
 import com.ban.cheonil.payment.entity.Payment;
-import com.ban.cheonil.setting.SettingService;
-import com.ban.cheonil.setting.entity.OperatingHours;
 import com.ban.cheonil.sales.stats.dto.CategoryPart;
 import com.ban.cheonil.sales.stats.dto.DateRangeParams;
 import com.ban.cheonil.sales.stats.dto.HourBucket;
@@ -50,6 +48,8 @@ import com.ban.cheonil.sales.stats.dto.StoreHourHeatmap;
 import com.ban.cheonil.sales.stats.dto.StoreMenuMix;
 import com.ban.cheonil.sales.stats.dto.StoreSales;
 import com.ban.cheonil.sales.stats.dto.TrendPoint;
+import com.ban.cheonil.setting.SettingService;
+import com.ban.cheonil.setting.entity.OperatingHours;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
 
@@ -149,15 +149,15 @@ public class SalesStatsService {
   }
 
   /* =========================================================
-   * Store — 점포별 매출/메뉴 비중/주문 빈도/미수/결제분포
+   * Store — 점포별 매출, 주문 건수, 메뉴, 시간X매장 heatmap
    * ========================================================= */
 
   public StatsStoreRes store(DateRangeParams params) {
     OffsetDateTime[] cur = dayRange(params.from(), params.to());
     List<Order> orders = orderRepo.findAll(rangeSpec(cur));
 
-    // 점포별 매출
-    List<StoreSales> stores = topStores(orders, Integer.MAX_VALUE);
+    // 점포별 매출 (전체)
+    List<StoreSales> stores = topStores(orders);
 
     // 점포별 주문 건수
     Map<Short, Long> countMap =
@@ -216,6 +216,11 @@ public class SalesStatsService {
   private String storeNm(Map<Short, Store> map, Short seq) {
     Store s = map.get(seq);
     return s != null ? s.getNm() : null;
+  }
+
+  /** 매장별 매출 — limit 미지정 시 전체. */
+  private List<StoreSales> topStores(List<Order> orders) {
+    return topStores(orders, Integer.MAX_VALUE);
   }
 
   private List<StoreSales> topStores(List<Order> orders, int limit) {
@@ -289,8 +294,8 @@ public class SalesStatsService {
   /**
    * 시간대별 메뉴 판매 stacked — 시간 × 메뉴 cross-tab.
    *
-   * <p>전체 기간 수량 TOP 5 메뉴 추출 + 그 외 "기타" 합산. 각 hour 별로 [TOP1, TOP2, ..., TOP5, 기타] 순서의 cnt 배열을
-   * counts 로 노출.
+   * <p>전체 기간 수량 TOP 5 메뉴 추출 + 그 외 "기타" 합산. 각 hour 별로 [TOP1, TOP2, ..., TOP5, 기타] 순서의 cnt 배열을 counts
+   * 로 노출.
    */
   private StatsHourMenuStack aggregateHourMenuStack(List<Order> orders) {
     if (orders.isEmpty()) return new StatsHourMenuStack(List.of(), List.of());
@@ -314,7 +319,8 @@ public class SalesStatsService {
     boolean hasEtc = sorted.size() > 5;
 
     // menus 라벨 순서 (TOP1 → TOP5 → "기타")
-    List<String> menuNames = new java.util.ArrayList<>(top5.stream().map(e -> e.getValue().nm).toList());
+    List<String> menuNames =
+        new java.util.ArrayList<>(top5.stream().map(e -> e.getValue().nm).toList());
     if (hasEtc) menuNames.add("기타");
     int slots = menuNames.size();
 
@@ -343,8 +349,7 @@ public class SalesStatsService {
             .map(
                 e ->
                     new HourMenuStack(
-                        e.getKey(),
-                        java.util.Arrays.stream(e.getValue()).boxed().toList()))
+                        e.getKey(), java.util.Arrays.stream(e.getValue()).boxed().toList()))
             .toList();
     return new StatsHourMenuStack(menuNames, hours);
   }
