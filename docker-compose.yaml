@@ -60,7 +60,7 @@ services:
     ports:
       - 80:80
     environment:
-      API_BACKEND_URL: http://cheonil-server:8080
+      API_BACKEND_URL: http://app:8080
     depends_on:
       - app
     networks:
