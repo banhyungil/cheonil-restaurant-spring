@@ -31,10 +31,10 @@ services:
       - cheonil
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # image: ban/cheonil-restaurant-spring
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: ban/cheonil-restaurant-spring
     container_name: cheonil-server
     restart: always
     ports:
@@ -48,6 +48,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - cheonil
+
+  web:
+    container_name: cheonil-web
+    image: banhyungil/cheonil-restaurant-next
+    ports:
+      - 80:80
+    environment:
+      API_BACKEND_URL: http://cheonil-server:8080
+    depends_on:
+      - app
     networks:
       - cheonil
 
