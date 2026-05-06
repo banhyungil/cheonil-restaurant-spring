@@ -85,6 +85,16 @@ public class OrderRsvService {
    * Read
    * ========================================================= */
 
+  /** 단건 aggregate — 매장/메뉴 join 결과. 수동 트리거 등 단일 OrderRsv 조회용. */
+  @Transactional(readOnly = true)
+  public OrderRsvExtRes findExtBySeq(Long seq) {
+    OrderRsv rsv =
+        orderRsvRepo
+            .findById(seq)
+            .orElseThrow(() -> new EntityNotFoundException("orderRsv " + seq + " not found"));
+    return assemble(List.of(rsv)).getFirst();
+  }
+
   @Transactional(readOnly = true)
   public List<OrderRsvExtRes> findByParams(OrderRsvsListParams params) {
     List<OrderRsv> rsvs =

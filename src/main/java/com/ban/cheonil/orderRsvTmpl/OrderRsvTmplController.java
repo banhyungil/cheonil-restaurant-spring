@@ -1,5 +1,6 @@
 package com.ban.cheonil.orderRsvTmpl;
 
+import com.ban.cheonil.orderRsv.dto.OrderRsvExtRes;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplCreateReq;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplExtRes;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplPatchActiveReq;
@@ -72,6 +73,18 @@ public class OrderRsvTmplController {
   public void patchAutoOrder(
       @PathVariable Short seq, @RequestBody OrderRsvTmplPatchAutoOrderReq req) {
     orderRsvTmplService.patchAutoOrder(seq, req.autoOrder());
+  }
+
+  /**
+   * 단건 수동 트리거 — 특정 템플릿으로 오늘 일자 예약 즉시 생성.
+   *
+   * <p>스케줄러 룰 (active / day_types / start_dt / end_dt) 검증 안함 — 운영자 수동 강제. 이미 같은 (tmpl, today+rsvTime)
+   * 으로 예약 있으면 멱등 처리 (기존 결과 반환).
+   */
+  @PostMapping("/{seq}/generate-rsv")
+  public ResponseEntity<OrderRsvExtRes> generateRsvToday(@PathVariable Short seq) {
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(orderRsvTmplService.generateRsvToday(seq));
   }
 
   /** 템플릿 삭제. 연결된 인스턴스는 DB 가 rsv_tmpl_seq=NULL 처리 (FK ON DELETE SET NULL 가정). */

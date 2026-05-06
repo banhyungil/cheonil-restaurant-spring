@@ -1,7 +1,9 @@
 package com.ban.cheonil.orderRsvTmpl;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +18,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ban.cheonil.orderRsv.OrderRsvRepo;
+import com.ban.cheonil.orderRsv.OrderRsvService;
+import com.ban.cheonil.orderRsv.dto.OrderRsvExtRes;
+import com.ban.cheonil.orderRsv.entity.OrderRsv;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplCreateReq;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplExtRes;
 import com.ban.cheonil.orderRsvTmpl.dto.OrderRsvTmplMenuExtRes;
@@ -24,6 +30,7 @@ import com.ban.cheonil.orderRsvTmpl.entity.DayType;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmplMenu;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmplMenuId;
+import com.ban.cheonil.orderRsvTmpl.scheduler.OrderRsvCreator;
 import com.ban.cheonil.store.StoreRepo;
 import com.ban.cheonil.store.entity.Store;
 
@@ -35,7 +42,11 @@ public class OrderRsvTmplService {
 
   private final OrderRsvTmplRepo orderRsvTmplRepo;
   private final OrderRsvTmplMenuRepo orderRsvTmplMenuRepo;
+  private final OrderRsvRepo orderRsvRepo;
+  private final OrderRsvCreator orderRsvCreator;
+  private final OrderRsvService orderRsvService;
   private final StoreRepo storeRepo;
+  private final Clock clock;
 
   /* =========================================================
    * Create
@@ -138,6 +149,39 @@ public class OrderRsvTmplService {
             .orElseThrow(() -> new EntityNotFoundException("orderRsvTmpl " + seq + " not found"));
     tmpl.setAutoOrder(autoOrder);
     tmpl.setModAt(OffsetDateTime.now());
+  }
+
+  /**
+   * 단일 템플릿 → 오늘 예약 즉시 생성 (수동 트리거).
+   *
+   * <p>스케줄러 룰 (active / day_types / start_dt / end_dt) 검증 안함 — 운영자 책임. 이미 같은 (tmpl, rsvAt) 가
+   * 존재하면 멱등 처리 (기존 결과 반환).
+   *
+   * @return 생성된 또는 기존 OrderRsv 의 ext aggregate
+   */
+  @Transactional
+  public OrderRsvExtRes generateRsvToday(Short tmplSeq) {
+    OrderRsvTmpl tmpl =
+        orderRsvTmplRepo
+            .findById(tmplSeq)
+            .orElseThrow(
+                () -> new EntityNotFoundException("orderRsvTmpl " + tmplSeq + " not found"));
+
+    OffsetDateTime rsvAt =
+        LocalDate.now(clock)
+            .atTime(tmpl.getRsvTime())
+            .atZone(ZoneId.systemDefault())
+            .toOffsetDateTime();
+
+    orderRsvCreator.create(tmpl, rsvAt); // boolean 무시 — 생성/skip 둘 다 후속 lookup 성공
+    OrderRsv rsv =
+        orderRsvRepo
+            .findByRsvTmplSeqAndRsvAt(tmplSeq, rsvAt)
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "예약 생성 직후 lookup 실패 (tmplSeq=" + tmplSeq + ", rsvAt=" + rsvAt + ")"));
+    return orderRsvService.findExtBySeq(rsv.getSeq());
   }
 
   /* =========================================================
