@@ -56,7 +56,7 @@ services:
     build:
       context: ../cheonil-restaurant-next
       dockerfile: Dockerfile
-    image: banhyungil/cheonil-restaurant-next
+    # image: banhyungil/cheonil-restaurant-next
     ports:
       - 80:80
     environment:
