@@ -80,6 +80,10 @@ public class OrderRsvTmpl {
   @Column(name = "end_dt")
   private LocalDate endDt;
 
+  /** 스케줄러가 마지막으로 이 템플릿에서 예약을 생성한 시각. 목록 조회 시 오늘 예약 생성 여부 파악용. */
+  @Column(name = "last_rsv_gen_at")
+  private OffsetDateTime lastRsvGenAt;
+
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "options")
   private Map<String, Object> options;

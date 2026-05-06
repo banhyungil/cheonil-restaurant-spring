@@ -225,23 +225,25 @@ create index idx_product_unit on m_product (unit_seq);
 -- ---------------------------------------------------------------------
 create table m_order_rsv_tmpl
 (
-    seq        smallserial primary key,
-    store_seq  smallint                                       not null,
-    nm         varchar(40)                                    not null,
-    amount     integer                                        not null,
-    rsv_time   time                                           not null,
-    day_types  day_type[]                                     not null,
-    cmt        varchar(1000),
-    active     boolean                  default true,
-    auto_order boolean                  default false         not null,
-    start_dt   date                     default (now())::date not null,
-    end_dt     date,
-    options    jsonb,
-    reg_at     timestamp with time zone default now(),
-    mod_at     timestamp with time zone default now()
+    seq             smallserial primary key,
+    store_seq       smallint                                       not null,
+    nm              varchar(40)                                    not null,
+    amount          integer                                        not null,
+    rsv_time        time                                           not null,
+    day_types       day_type[]                                     not null,
+    cmt             varchar(1000),
+    active          boolean                  default true,
+    auto_order      boolean                  default false         not null,
+    start_dt        date                     default (now())::date not null,
+    end_dt          date,
+    last_rsv_gen_at timestamp with time zone,
+    options         jsonb,
+    reg_at          timestamp with time zone default now(),
+    mod_at          timestamp with time zone default now()
 );
 comment on table m_order_rsv_tmpl is '예약 주문 템플릿 (단골 반복 예약)';
 comment on column m_order_rsv_tmpl.auto_order is '예약 자동 생성 시 주문(t_order)도 즉시 생성 여부 — 신뢰 단골에 한해 활성화';
+comment on column m_order_rsv_tmpl.last_rsv_gen_at is '스케줄러가 마지막으로 이 템플릿에서 예약(t_order_rsv) 을 생성한 시각 — 목록 조회 시 오늘 예약 생성 여부 파악용';
 create index idx_order_rsv_tmpl_store on m_order_rsv_tmpl (store_seq);
 
 -- ---------------------------------------------------------------------

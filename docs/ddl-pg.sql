@@ -260,12 +260,15 @@ create table public.m_order_rsv_tmpl
     auto_order boolean                 default false         not null,
     start_dt  date                     default (now())::date not null,
     end_dt    date,
+    last_rsv_gen_at timestamp with time zone,
     options   jsonb,
     reg_at    timestamp with time zone default now(),
     mod_at    timestamp with time zone default now()
 );
 
 comment on table public.m_order_rsv_tmpl is '예약 주문 템플릿 (단골 반복 예약)';
+
+comment on column public.m_order_rsv_tmpl.last_rsv_gen_at is '스케줄러가 마지막으로 이 템플릿에서 예약(t_order_rsv) 을 생성한 시각 — 목록 조회 시 오늘 예약 생성 여부 파악용';
 
 comment on column public.m_order_rsv_tmpl.seq is 'PK';
 

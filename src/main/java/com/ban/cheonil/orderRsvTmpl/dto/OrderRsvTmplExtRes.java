@@ -20,6 +20,8 @@ public record OrderRsvTmplExtRes(
     Boolean autoOrder,
     LocalDate startDt,
     LocalDate endDt,
+    /** 스케줄러가 마지막으로 예약을 생성한 시각. 목록에서 오늘 생성 여부 판별 용. */
+    OffsetDateTime lastRsvGenAt,
     OffsetDateTime regAt,
     OffsetDateTime modAt,
     String storeNm,

@@ -9,6 +9,7 @@ import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
 import com.ban.cheonil.orderRsv.entity.OrderRsvMenuId;
 import com.ban.cheonil.orderRsv.entity.RsvStatus;
 import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplMenuRepo;
+import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplRepo;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
 import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmplMenu;
 import java.time.Clock;
@@ -33,6 +34,7 @@ public class OrderRsvCreator {
 
   private final OrderRsvRepo orderRsvRepo;
   private final OrderRsvMenuRepo orderRsvMenuRepo;
+  private final OrderRsvTmplRepo tmplRepo;
   private final OrderRsvTmplMenuRepo tmplMenuRepo;
   private final OrderService orderService;
   private final Clock clock;
@@ -90,6 +92,12 @@ public class OrderRsvCreator {
       saved.setStatus(RsvStatus.COMPLETED);
       saved.setModAt(OffsetDateTime.now(clock));
     }
+
+    // 마지막 생성 시각 업데이트 — managed entity 로 fetch 후 setter (dirty checking 으로 자동 update).
+    // 외부에서 넘어온 tmpl 은 detached 일 수 있어 직접 setter 호출 시 영속성 컨텍스트 반영 안 될 수 있음.
+    tmplRepo
+        .findById(tmpl.getSeq())
+        .ifPresent(t -> t.setLastRsvGenAt(now));
 
     return true;
   }

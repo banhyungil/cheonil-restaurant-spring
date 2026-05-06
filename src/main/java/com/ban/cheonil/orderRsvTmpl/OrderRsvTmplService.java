@@ -215,6 +215,7 @@ public class OrderRsvTmplService {
         t.getAutoOrder(),
         t.getStartDt(),
         t.getEndDt(),
+        t.getLastRsvGenAt(),
         t.getRegAt(),
         t.getModAt(),
         store != null ? store.getNm() : null,
