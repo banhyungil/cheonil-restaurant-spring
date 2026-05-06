@@ -26,6 +26,10 @@ spring:
     # 새 환경 (빈 DB) 에서는 baseline-on-migrate 와 무관하게 V1 부터 모두 실행.
     baseline-on-migrate: true
     baseline-version: 1
+    # ⚠️ 운영 전환 시 반드시 제거 (또는 true) — checksum 검증 안전망.
+    # 개발 단계 한정: 적용된 V2 (seed) 를 자유롭게 누적 편집할 수 있도록 임시로 끔.
+    # 운영 들어가면: 모든 변경은 V3, V4 ... 신규 migration 으로만 추가.
+    validate-on-migrate: false
 springdoc:
   api-docs:
     path: /api-docs
