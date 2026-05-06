@@ -41,9 +41,9 @@ public class SalesController {
     return salesService.summary(params);
   }
 
-  /** 정산 탭 — 그날 거래 내역 (lazy pagination). */
+  /** 정산 탭 — 그날 거래 내역 (전체 응답, 클라 페이징/필터). */
   @GetMapping("/transactions")
-  public Page<TransactionRes> transactions(@Valid @ModelAttribute TransactionsParams params) {
+  public List<TransactionRes> transactions(@Valid @ModelAttribute TransactionsParams params) {
     return salesService.transactions(params);
   }
 

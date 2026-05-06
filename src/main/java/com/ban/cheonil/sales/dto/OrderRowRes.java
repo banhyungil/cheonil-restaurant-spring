@@ -1,9 +1,9 @@
 package com.ban.cheonil.sales.dto;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import com.ban.cheonil.order.entity.OrderStatus;
-import com.ban.cheonil.payment.entity.PayType;
 
 /**
  * 주문내역관리 그리드 row — {@link TransactionRes} 와 동일한 join 결과 + status / cmt 추가.
@@ -18,8 +18,6 @@ public record OrderRowRes(
     Integer orderAmount,
     OffsetDateTime orderAt,
     OffsetDateTime cookedAt,
-    PayType payType,
-    OffsetDateTime payAt,
-    Integer payAmount,
+    List<PaymentRes> payments,
     OrderStatus status,
     String cmt) {}

@@ -14,6 +14,7 @@ import jakarta.persistence.criteria.Subquery;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -36,6 +37,7 @@ import com.ban.cheonil.sales.dto.OrderRowRes;
 import com.ban.cheonil.sales.dto.OrdersParams;
 import com.ban.cheonil.sales.dto.OrdersSummaryRes;
 import com.ban.cheonil.sales.dto.PayMethodSummary;
+import com.ban.cheonil.sales.dto.PaymentRes;
 import com.ban.cheonil.sales.dto.SalesSummaryParams;
 import com.ban.cheonil.sales.dto.SalesSummaryRes;
 import com.ban.cheonil.sales.dto.TransactionRes;
@@ -101,16 +103,14 @@ public class SalesService {
   }
 
   /* =========================================================
-   * Transactions — 그날 거래 내역
+   * Transactions — 그날 거래 내역 (전체 응답, 클라 페이징/필터)
    * ========================================================= */
 
-  public Page<TransactionRes> transactions(TransactionsParams params) {
+  public List<TransactionRes> transactions(TransactionsParams params) {
     OffsetDateTime[] dayRange = dayRangeOf(params.date());
-    Pageable pageable = pageableOf(params.page(), params.size());
-
-    Specification<Order> spec =
-        baseDateRange(dayRange).and(storeFilter(params.storeSeq())).and(payTypeFilter(params.payType()));
-    return assembleTransactions(orderRepo.findAll(spec, pageable));
+    Specification<Order> spec = baseDateRange(dayRange).and(storeFilter(params.storeSeq()));
+    List<Order> orders = orderRepo.findAll(spec, Sort.by(Sort.Direction.DESC, "orderAt"));
+    return assembleTransactionList(orders);
   }
 
   /* =========================================================
@@ -122,7 +122,9 @@ public class SalesService {
     Specification<Order> spec =
         Specification.<Order>where((r, q, cb) -> cb.notEqual(r.get("status"), OrderStatus.PAID))
             .and(storeFilter(params.storeSeq()));
-    return assembleTransactions(orderRepo.findAll(spec, pageable));
+    Page<Order> orderPage = orderRepo.findAll(spec, pageable);
+    List<TransactionRes> content = assembleTransactionList(orderPage.getContent());
+    return new PageImpl<>(content, pageable, orderPage.getTotalElements());
   }
 
   /* =========================================================
@@ -255,13 +257,13 @@ public class SalesService {
     return new PayMethodSummary(amount, count);
   }
 
-  /** order page → transaction page (결제 / 매장 / 메뉴 batch fetch + 조립). */
-  private Page<TransactionRes> assembleTransactions(Page<Order> orderPage) {
-    if (orderPage.isEmpty()) return orderPage.map(o -> null);
+  /** orders → transactions (결제 / 매장 / 메뉴 batch fetch + 조립). */
+  private List<TransactionRes> assembleTransactionList(List<Order> orders) {
+    if (orders.isEmpty()) return List.of();
 
-    List<Long> orderSeqs = orderPage.getContent().stream().map(Order::getSeq).toList();
+    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
     Set<Short> storeSeqs =
-        orderPage.getContent().stream().map(Order::getStoreSeq).collect(Collectors.toSet());
+        orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
 
     Map<Long, List<Payment>> paymentsByOrder =
         paymentRepo.findByOrderSeqIn(orderSeqs).stream()
@@ -273,39 +275,29 @@ public class SalesService {
         orderMenuRepo.findExtsByOrderSeqs(orderSeqs).stream()
             .collect(Collectors.groupingBy(OrderMenuExtRes::orderSeq));
 
-    return orderPage.map(
-        o ->
-            toTransactionRes(
-                o,
-                storeMap.get(o.getStoreSeq()),
-                paymentsByOrder.getOrDefault(o.getSeq(), List.of()),
-                menusByOrder.getOrDefault(o.getSeq(), List.of())));
+    return orders.stream()
+        .map(
+            o ->
+                toTransactionRes(
+                    o,
+                    storeMap.get(o.getStoreSeq()),
+                    paymentsByOrder.getOrDefault(o.getSeq(), List.of()),
+                    menusByOrder.getOrDefault(o.getSeq(), List.of())))
+        .toList();
   }
 
-  /**
-   * 분할 결제 시 {@code payAmount} 는 합계, {@code payType} / {@code payAt} 는 첫 row 기준 (UI 단순화).
-   */
+  /** 분할 결제 시 {@code payments} 에 다수 entry — UI 가 합계/마지막시각/분할 표기 등을 결정. */
   private TransactionRes toTransactionRes(
       Order o, Store store, List<Payment> payments, List<OrderMenuExtRes> menus) {
-    String menuSummary =
-        menus.stream()
-            .map(m -> m.menuNm() + " " + m.cnt())
-            .collect(Collectors.joining(", "));
-    int payAmount = payments.stream().mapToInt(Payment::getAmount).sum();
-    PayType payType = payments.isEmpty() ? null : payments.getFirst().getPayType();
-    OffsetDateTime payAt = payments.isEmpty() ? null : payments.getFirst().getPayAt();
-
     return new TransactionRes(
         o.getSeq(),
         o.getStoreSeq(),
         store != null ? store.getNm() : null,
-        menuSummary,
+        menuSummaryOf(menus),
         o.getAmount(),
         o.getOrderAt(),
         o.getCookedAt(),
-        payType,
-        payAt,
-        payAmount);
+        toPaymentResList(payments));
   }
 
   /* ---- Specification 부품 ---- */
@@ -336,27 +328,29 @@ public class SalesService {
   /** {@link TransactionRes} 와 동일한 join 결과 + status / cmt 추가. */
   private OrderRowRes toOrderRowRes(
       Order o, Store store, List<Payment> payments, List<OrderMenuExtRes> menus) {
-    String menuSummary =
-        menus.stream()
-            .map(m -> m.menuNm() + " " + m.cnt())
-            .collect(Collectors.joining(", "));
-    int payAmount = payments.stream().mapToInt(Payment::getAmount).sum();
-    PayType payType = payments.isEmpty() ? null : payments.getFirst().getPayType();
-    OffsetDateTime payAt = payments.isEmpty() ? null : payments.getFirst().getPayAt();
-
     return new OrderRowRes(
         o.getSeq(),
         o.getStoreSeq(),
         store != null ? store.getNm() : null,
-        menuSummary,
+        menuSummaryOf(menus),
         o.getAmount(),
         o.getOrderAt(),
         o.getCookedAt(),
-        payType,
-        payAt,
-        payAmount,
+        toPaymentResList(payments),
         o.getStatus(),
         o.getCmt());
+  }
+
+  private String menuSummaryOf(List<OrderMenuExtRes> menus) {
+    return menus.stream()
+        .map(m -> m.menuNm() + " " + m.cnt())
+        .collect(Collectors.joining(", "));
+  }
+
+  private List<PaymentRes> toPaymentResList(List<Payment> payments) {
+    return payments.stream()
+        .map(p -> new PaymentRes(p.getPayType(), p.getAmount(), p.getPayAt()))
+        .toList();
   }
 
   private Specification<Order> payTypeFilter(String payType) {
