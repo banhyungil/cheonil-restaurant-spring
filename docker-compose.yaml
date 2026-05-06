@@ -1,0 +1,60 @@
+# =====================================================================
+# Local / dev compose stack — PostgreSQL + Spring app.
+#
+# 사용:
+#   docker compose up -d             # PG + app 빌드 + 백그라운드 기동
+#   docker compose logs -f app       # 앱 로그
+#   docker compose down              # 컨테이너 정지 (data volume 보존)
+#   docker compose down -v           # data volume 까지 삭제 (DB 초기화)
+# =====================================================================
+
+services:
+  db:
+    image: postgres:17
+    container_name: cheonil-db
+    restart: always
+    volumes:
+      - v-db:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root1!
+      POSTGRES_DB: cheonil
+    healthcheck:
+      # app 컨테이너가 PG ready 까지 대기 — depends_on.condition: service_healthy 와 결합
+      test: [ "CMD-SHELL", "pg_isready -U root -d cheonil" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cheonil
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: ban/cheonil-restaurant-spring
+    container_name: cheonil-server
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      # application.yaml 의 spring.datasource.* 를 환경변수로 override.
+      # 컨테이너 간 통신은 service 이름(db) 을 hostname 으로 사용.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cheonil
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root1!
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cheonil
+
+networks:
+  cheonil:
+    name: cheonil
+    driver: bridge
+
+volumes:
+  v-db:
