@@ -449,7 +449,9 @@ async function migrate() {
         continue;
       }
 
-      // 배치 INSERT
+      // 배치 INSERT — ON CONFLICT DO NOTHING 으로 PK/unique 충돌 row 만 skip.
+      // (TRUNCATE 옵션 안 줬을 때 재실행 안전성 보장)
+      let inserted = 0;
       for (let i = 0; i < transformed.length; i += BATCH_SIZE) {
         const chunk = transformed.slice(i, i + BATCH_SIZE);
         const placeholders = chunk
@@ -460,14 +462,22 @@ async function migrate() {
           .join(", ");
         const flat = chunk.flat();
 
-        // Multi Row Insert
+        // Multi Row Insert + 중복 skip
         // placeholder와 row, col 평탄화 배열을 이용해 삽입
-        const sql = `INSERT INTO ${m.to} (${m.columns.join(", ")}) VALUES ${placeholders}`;
-        await pg.query(sql, flat);
+        const sql = `INSERT INTO ${m.to} (${m.columns.join(", ")}) VALUES ${placeholders} ON CONFLICT DO NOTHING`;
+        const result = await pg.query(sql, flat);
+        inserted += result.rowCount ?? 0;
       }
 
-      console.log(`  ✓ ${rows.length} rows inserted`);
-      summary.push({ from: m.from, to: m.to, rows: rows.length, status: "ok" });
+      const skipped = rows.length - inserted;
+      const skipMsg = skipped > 0 ? ` (${skipped} skipped — duplicate)` : "";
+      console.log(`  ✓ ${inserted} rows inserted${skipMsg}`);
+      summary.push({
+        from: m.from,
+        to: m.to,
+        rows: inserted,
+        status: skipped > 0 ? `ok (${skipped} skipped)` : "ok",
+      });
     }
 
     // 시퀀스 동기화 (SERIAL PK가 있는 테이블 전체)
