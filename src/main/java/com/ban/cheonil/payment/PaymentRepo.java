@@ -1,6 +1,5 @@
 package com.ban.cheonil.payment;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,7 +13,4 @@ public interface PaymentRepo extends JpaRepository<Payment, Long> {
 
   /** 거래 내역 page 조립 — N 주문에 대해 한번에 fetch. */
   List<Payment> findByOrderSeqIn(List<Long> orderSeqs);
-
-  /** 정산 KPI 집계 — 기간 내 결제 row. payType / 매장 필터는 service 단에서. */
-  List<Payment> findByPayAtBetween(OffsetDateTime from, OffsetDateTime to);
 }

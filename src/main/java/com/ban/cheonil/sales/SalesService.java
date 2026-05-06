@@ -79,22 +79,22 @@ public class SalesService {
     OffsetDateTime[] dayRange = dayRangeOf(date);
     OffsetDateTime[] prevDayRange = dayRangeOf(date.minusDays(1));
 
-    int totalSales = orderRepo.sumAmountByOrderAtRange(dayRange[0], dayRange[1]);
     int prevSales = orderRepo.sumAmountByOrderAtRange(prevDayRange[0], prevDayRange[1]);
     int expenseTotal = expenseRepo.sumAmountByExpenseAtRange(dayRange[0], dayRange[1]);
+
+    // 그날 주문 — 매출 / 결제 / 미수 모두 orderAt 기준 (다음날 수금된 결제도 주문일자에 귀속).
+    List<Order> dayOrders = orderRepo.findAll(baseDateRange(dayRange));
+    int totalSales = dayOrders.stream().mapToInt(Order::getAmount).sum();
     int netSales = totalSales - expenseTotal;
 
-    List<Payment> payments = paymentRepo.findByPayAtBetween(dayRange[0], dayRange[1]);
+    List<Long> orderSeqs = dayOrders.stream().map(Order::getSeq).toList();
+    List<Payment> payments =
+        orderSeqs.isEmpty() ? List.of() : paymentRepo.findByOrderSeqIn(orderSeqs);
     PayMethodSummary cash = aggregateBy(payments, PayType.CASH);
     PayMethodSummary card = aggregateBy(payments, PayType.CARD);
 
-    // 그날 미수 — 그날 주문 중 status != PAID (수금 탭의 전체 미수와 다름)
-    Specification<Order> dayUnpaidSpec =
-        Specification.allOf(
-            (r, q, cb) -> cb.greaterThanOrEqualTo(r.get("orderAt"), dayRange[0]),
-            (r, q, cb) -> cb.lessThan(r.get("orderAt"), dayRange[1]),
-            (r, q, cb) -> cb.notEqual(r.get("status"), OrderStatus.PAID));
-    List<Order> dayUnpaidOrders = orderRepo.findAll(dayUnpaidSpec);
+    List<Order> dayUnpaidOrders =
+        dayOrders.stream().filter(o -> o.getStatus() != OrderStatus.PAID).toList();
     int unpaidAmount = dayUnpaidOrders.stream().mapToInt(Order::getAmount).sum();
     PayMethodSummary unpaid = new PayMethodSummary(unpaidAmount, dayUnpaidOrders.size());
 
