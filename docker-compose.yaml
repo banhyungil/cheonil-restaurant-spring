@@ -31,10 +31,10 @@ services:
       - cheonil
 
   app:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    image: banhyungil/cheonil-restaurant-spring
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: banhyungil/cheonil-restaurant-spring
     container_name: cheonil-server
     restart: always
     ports:
@@ -53,6 +53,9 @@ services:
 
   web:
     container_name: cheonil-web
+    build:
+      context: ../cheonil-restaurant-next
+      dockerfile: Dockerfile
     image: banhyungil/cheonil-restaurant-next
     ports:
       - 80:80
