@@ -34,7 +34,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    image: ban/cheonil-restaurant-spring
+    image: banhyungil/cheonil-restaurant-spring
     container_name: cheonil-server
     restart: always
     ports:
