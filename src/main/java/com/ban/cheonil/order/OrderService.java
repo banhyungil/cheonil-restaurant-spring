@@ -17,8 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ban.cheonil.order.dto.OrderCreateReq;
 import com.ban.cheonil.order.dto.OrderExtRes;
-import com.ban.cheonil.order.dto.OrderMenuRes;
 import com.ban.cheonil.order.dto.OrderMenuExtRes;
+import com.ban.cheonil.order.dto.OrderMenuRes;
 import com.ban.cheonil.order.dto.OrderRes;
 import com.ban.cheonil.order.dto.OrderStatusChangeRes;
 import com.ban.cheonil.order.dto.OrdersListParams;
@@ -91,8 +91,8 @@ public class OrderService {
   /**
    * 예약(t_order_rsv) → 실제 주문(t_order) 변환.
    *
-   * <p>예약 상태가 RESERVED → COMPLETED 로 전이될 때 {@link
-   * com.ban.cheonil.orderRsv.OrderRsvService} 가 호출. 메뉴 가격은 예약 시점 스냅샷 그대로 복사.
+   * <p>예약 상태가 RESERVED → COMPLETED 로 전이될 때 {@link com.ban.cheonil.orderRsv.OrderRsvService} 가 호출.
+   * 메뉴 가격은 예약 시점 스냅샷 그대로 복사.
    *
    * @return 새로 생성된 Order
    */
@@ -141,7 +141,7 @@ public class OrderService {
   @Transactional(readOnly = true)
   public List<OrderExtRes> findByParams(OrdersListParams params) {
     List<Order> orders =
-        orderRepo.findAll(buildSpec(params), Sort.by(Sort.Direction.ASC, "orderAt"));
+        orderRepo.findAll(buildSpec(params), Sort.by(Sort.Direction.DESC, "orderAt"));
     if (orders.isEmpty()) return List.of();
     return assemble(orders);
   }
@@ -205,8 +205,7 @@ public class OrderService {
             .findById(seq)
             .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
     if (order.getStatus() != OrderStatus.PAID) {
-      throw new IllegalStateException(
-          "PAID 주문만 복귀(결제 취소) 가능 (현재: " + order.getStatus() + ")");
+      throw new IllegalStateException("PAID 주문만 복귀(결제 취소) 가능 (현재: " + order.getStatus() + ")");
     }
     order.setStatus(OrderStatus.COOKED);
     order.setModAt(OffsetDateTime.now());
@@ -229,8 +228,7 @@ public class OrderService {
             .findById(seq)
             .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
     if (order.getStatus() != OrderStatus.READY) {
-      throw new IllegalStateException(
-          "READY 상태에서만 수정 가능 (현재: " + order.getStatus() + ")");
+      throw new IllegalStateException("READY 상태에서만 수정 가능 (현재: " + order.getStatus() + ")");
     }
 
     int amount = ocReq.menus().stream().mapToInt(i -> i.price() * i.cnt()).sum();
@@ -289,8 +287,8 @@ public class OrderService {
   /**
    * 예약 복구(COMPLETED → RESERVED) 시 변환됐던 주문을 삭제.
    *
-   * <p>READY 상태 주문만 삭제 허용 — 조리 시작(COOKED)/결제(PAID) 된 주문은 차단.
-   * 메뉴 항목도 cascade 삭제 + SSE Removed 이벤트 발행.
+   * <p>READY 상태 주문만 삭제 허용 — 조리 시작(COOKED)/결제(PAID) 된 주문은 차단. 메뉴 항목도 cascade 삭제 + SSE Removed 이벤트
+   * 발행.
    */
   @Transactional
   public void removeIfReady(Long seq) {
@@ -299,8 +297,7 @@ public class OrderService {
             .findById(seq)
             .orElseThrow(() -> new EntityNotFoundException("order " + seq + " not found"));
     if (order.getStatus() != OrderStatus.READY) {
-      throw new IllegalStateException(
-          "READY 상태 주문만 복구(삭제) 가능 (현재: " + order.getStatus() + ")");
+      throw new IllegalStateException("READY 상태 주문만 복구(삭제) 가능 (현재: " + order.getStatus() + ")");
     }
     orderMenuRepo.deleteByIdOrderSeq(seq);
     orderRepo.delete(order);
