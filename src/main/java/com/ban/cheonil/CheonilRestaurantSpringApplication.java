@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import com.ban.cheonil.common.config.TimeZoneConfig;
 import com.ban.cheonil.order.sse.OrderEventPublisher;
 
 /**
@@ -21,6 +22,9 @@ import com.ban.cheonil.order.sse.OrderEventPublisher;
 public class CheonilRestaurantSpringApplication {
 
   public static void main(String[] args) {
+    // 비즈니스 TZ (KST) 를 JVM 기본 TZ 로 고정 — 컨텍스트 부팅 전에 호출되어야
+    // ClockConfig 의 Clock.systemDefaultZone() 도 KST 로 캡처됨.
+    TimeZoneConfig.apply();
     SpringApplication.run(CheonilRestaurantSpringApplication.class, args);
   }
 }
