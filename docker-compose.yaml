@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile
     # image: banhyungil/cheonil-restaurant-spring
-    container_name: cheonil-server
+    container_name: cheonil-server2
     restart: always
     ports:
       - "8080:8080"
@@ -59,7 +59,7 @@ services:
       dockerfile: Dockerfile
     # image: banhyungil/cheonil-restaurant-next
     ports:
-      - 80:80
+      - 81:80
     environment:
       API_BACKEND_URL: http://app:8080
     depends_on:

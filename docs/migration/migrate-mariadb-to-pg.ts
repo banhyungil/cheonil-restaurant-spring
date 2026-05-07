@@ -30,7 +30,7 @@ import { Client as PgClient } from "pg";
 const MARIA_CONN = {
   host: "localhost",
   user: "root",
-  port: 3306,
+  port: 3307,
   password: "nice2122!",
   database: "cheonil",
 };
@@ -38,7 +38,7 @@ const MARIA_CONN = {
 const PG_CONN = {
   host: "localhost",
   user: "root",
-  port: 5433,
+  port: 5432,
   password: "root1!",
   database: "cheonil",
 };
