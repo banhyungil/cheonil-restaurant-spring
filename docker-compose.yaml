@@ -42,6 +42,7 @@ services:
     environment:
       # application.yaml 의 spring.datasource.* 를 환경변수로 override.
       # 컨테이너 간 통신은 service 이름(db) 을 hostname 으로 사용.
+      TZ: Asia/Seoul # 추가
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cheonil
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root1!
