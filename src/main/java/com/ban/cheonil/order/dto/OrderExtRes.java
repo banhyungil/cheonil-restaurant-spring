@@ -10,6 +10,8 @@ public record OrderExtRes(
     Long seq,
     Short storeSeq,
     Long rsvSeq,
+    /** 예약 주문일 때만 값 존재 — t_order_rsv.rsv_at. */
+    OffsetDateTime rsvAt,
     Integer amount,
     OrderStatus status,
     OffsetDateTime orderAt,

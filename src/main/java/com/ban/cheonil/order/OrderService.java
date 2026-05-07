@@ -27,6 +27,7 @@ import com.ban.cheonil.order.entity.OrderMenu;
 import com.ban.cheonil.order.entity.OrderMenuId;
 import com.ban.cheonil.order.entity.OrderStatus;
 import com.ban.cheonil.order.sse.OrderEvent;
+import com.ban.cheonil.orderRsv.OrderRsvRepo;
 import com.ban.cheonil.orderRsv.entity.OrderRsv;
 import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
 import com.ban.cheonil.store.StoreRepo;
@@ -41,6 +42,7 @@ public class OrderService {
   private final OrderRepo orderRepo;
   private final OrderMenuRepo orderMenuRepo;
   private final StoreRepo storeRepo;
+  private final OrderRsvRepo orderRsvRepo;
   private final ApplicationEventPublisher eventPublisher;
 
   /* =========================================================
@@ -309,21 +311,26 @@ public class OrderService {
    * Helpers
    * ========================================================= */
 
-  /** Order 리스트에 매장/메뉴 정보 batch fetch + Java 측 조립. 총 3 query (orders + menus + stores). */
+  /** Order 리스트에 매장/메뉴/예약 batch fetch + Java 측 조립. */
   private List<OrderExtRes> assemble(List<Order> orders) {
     List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
-    // Set 사용: 매장 중복 제거
     Set<Short> storeSeqs = orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
+    List<Long> rsvSeqs =
+        orders.stream().map(Order::getRsvSeq).filter(java.util.Objects::nonNull).toList();
 
-    // orderSeq로 grouping. order 조립시에 바로 꺼내기 위함
     Map<Long, List<OrderMenuExtRes>> menusByOrder =
         orderMenuRepo.findExtsByOrderSeqs(orderSeqs).stream()
             .collect(Collectors.groupingBy(OrderMenuExtRes::orderSeq));
 
-    // toMap 사용: list -> map으로 변환
     Map<Short, Store> storeMap =
         storeRepo.findAllById(storeSeqs).stream()
             .collect(Collectors.toMap(Store::getSeq, Function.identity()));
+
+    Map<Long, OffsetDateTime> rsvAtBySeq =
+        rsvSeqs.isEmpty()
+            ? Map.of()
+            : orderRsvRepo.findAllById(rsvSeqs).stream()
+                .collect(Collectors.toMap(OrderRsv::getSeq, OrderRsv::getRsvAt));
 
     return orders.stream()
         .map(
@@ -331,15 +338,18 @@ public class OrderService {
                 toExtRes(
                     o,
                     storeMap.get(o.getStoreSeq()),
+                    o.getRsvSeq() != null ? rsvAtBySeq.get(o.getRsvSeq()) : null,
                     menusByOrder.getOrDefault(o.getSeq(), List.of())))
         .toList();
   }
 
-  private OrderExtRes toExtRes(Order o, Store store, List<OrderMenuExtRes> menus) {
+  private OrderExtRes toExtRes(
+      Order o, Store store, OffsetDateTime rsvAt, List<OrderMenuExtRes> menus) {
     return new OrderExtRes(
         o.getSeq(),
         o.getStoreSeq(),
         o.getRsvSeq(),
+        rsvAt,
         o.getAmount(),
         o.getStatus(),
         o.getOrderAt(),
