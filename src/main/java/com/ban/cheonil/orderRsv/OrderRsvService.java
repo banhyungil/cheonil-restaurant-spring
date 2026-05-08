@@ -1,23 +1,5 @@
 package com.ban.cheonil.orderRsv;
 
-import com.ban.cheonil.order.OrderService;
-import com.ban.cheonil.order.entity.Order;
-import com.ban.cheonil.orderRsv.dto.OrderRsvCreateReq;
-import com.ban.cheonil.orderRsv.dto.OrderRsvExtRes;
-import com.ban.cheonil.orderRsv.dto.OrderRsvMenuExtRes;
-import com.ban.cheonil.orderRsv.dto.OrderRsvStatusChangeRes;
-import com.ban.cheonil.orderRsv.dto.OrderRsvsListParams;
-import com.ban.cheonil.orderRsv.dto.OrderRsvsListParams.DayMode;
-import com.ban.cheonil.orderRsv.entity.OrderRsv;
-import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
-import com.ban.cheonil.orderRsv.entity.OrderRsvMenuId;
-import com.ban.cheonil.orderRsv.entity.RsvStatus;
-import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplRepo;
-import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
-import com.ban.cheonil.store.StoreRepo;
-import com.ban.cheonil.store.entity.Store;
-import jakarta.persistence.EntityNotFoundException;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -26,11 +8,31 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+
+import jakarta.persistence.EntityNotFoundException;
+
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.ban.cheonil.order.OrderService;
+import com.ban.cheonil.order.entity.Order;
+import com.ban.cheonil.orderRsv.dto.OrderRsvCreateReq;
+import com.ban.cheonil.orderRsv.dto.OrderRsvExtRes;
+import com.ban.cheonil.orderRsv.dto.OrderRsvMenuExtRes;
+import com.ban.cheonil.orderRsv.dto.OrderRsvStatusChangeRes;
+import com.ban.cheonil.orderRsv.dto.OrderRsvsListParams;
+import com.ban.cheonil.orderRsv.entity.OrderRsv;
+import com.ban.cheonil.orderRsv.entity.OrderRsvMenu;
+import com.ban.cheonil.orderRsv.entity.OrderRsvMenuId;
+import com.ban.cheonil.orderRsv.entity.RsvStatus;
+import com.ban.cheonil.orderRsvTmpl.OrderRsvTmplRepo;
+import com.ban.cheonil.orderRsvTmpl.entity.OrderRsvTmpl;
+import com.ban.cheonil.store.StoreRepo;
+import com.ban.cheonil.store.entity.Store;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -95,6 +97,7 @@ public class OrderRsvService {
     return assemble(List.of(rsv)).getFirst();
   }
 
+  /** 예약 목록 조회 */
   @Transactional(readOnly = true)
   public List<OrderRsvExtRes> findByParams(OrderRsvsListParams params) {
     List<OrderRsv> rsvs =
@@ -147,10 +150,10 @@ public class OrderRsvService {
    * 상태 전이. 모든 전이 허용 + 주문 도메인 sync.
    *
    * <ul>
-   *   <li><b>RESERVED → COMPLETED</b>: t_order 자동 생성 + rsv.orderSeq 채움 + SSE Created broadcast.
-   *       이미 orderSeq 가 있으면 멱등 skip.
-   *   <li><b>COMPLETED → RESERVED</b> (복구): t_order 삭제 + rsv.orderSeq 클리어. 단 주문이 READY 상태일
-   *       때만 — COOKED/PAID 면 IllegalStateException.
+   *   <li><b>RESERVED → COMPLETED</b>: t_order 자동 생성 + rsv.orderSeq 채움 + SSE Created broadcast. 이미
+   *       orderSeq 가 있으면 멱등 skip.
+   *   <li><b>COMPLETED → RESERVED</b> (복구): t_order 삭제 + rsv.orderSeq 클리어. 단 주문이 READY 상태일 때만 —
+   *       COOKED/PAID 면 IllegalStateException.
    *   <li>기타 전이 (RESERVED↔CANCELED 등): status 만 변경, 주문 처리 없음.
    * </ul>
    */
@@ -255,28 +258,28 @@ public class OrderRsvService {
         menus);
   }
 
-  private Specification<OrderRsv> buildSpec(OrderRsvsListParams p) {
+  private Specification<OrderRsv> buildSpec(OrderRsvsListParams param) {
     Specification<OrderRsv> spec = (r, q, cb) -> cb.conjunction();
-    if (p.statuses() != null && !p.statuses().isEmpty()) {
-      spec = spec.and((r, q, cb) -> r.get("status").in(p.statuses()));
+    if (param.statuses() != null && !param.statuses().isEmpty()) {
+      spec = spec.and((r, q, cb) -> r.get("status").in(param.statuses()));
     }
-    if (p.storeSeq() != null) {
-      spec = spec.and((r, q, cb) -> cb.equal(r.get("storeSeq"), p.storeSeq()));
+    if (param.storeSeq() != null) {
+      spec = spec.and((r, q, cb) -> cb.equal(r.get("storeSeq"), param.storeSeq()));
     }
-    if (p.dayMode() == DayMode.TODAY) {
-      // 서버 기준 오늘 0시 ~ 내일 0시
-      LocalDate today = LocalDate.now();
-      OffsetDateTime start = today.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
-      OffsetDateTime end =
-          today.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
-      Specification<OrderRsv> finalSpec = spec;
-      spec =
-          finalSpec.and(
-              (r, q, cb) ->
-                  cb.and(
-                      cb.greaterThanOrEqualTo(r.get("rsvAt"), start),
-                      cb.lessThan(r.get("rsvAt"), end)));
+    // 예약일(rsvAt) 기간 필터. inclusive [fromDate 00:00, toDate+1 00:00).
+    // atStartOfDay 함수 사용
+    // 둘 다 null 이면 전체 조회.
+    if (param.fromDate() != null) {
+      OffsetDateTime from =
+          param.fromDate().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+      spec = spec.and((r, q, cb) -> cb.greaterThanOrEqualTo(r.get("rsvAt"), from));
     }
+    if (param.toDate() != null) {
+      OffsetDateTime toExclusive =
+          param.toDate().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+      spec = spec.and((r, q, cb) -> cb.lessThan(r.get("rsvAt"), toExclusive));
+    }
+
     return spec;
   }
 }
