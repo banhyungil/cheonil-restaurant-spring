@@ -58,6 +58,7 @@ services:
       context: ../cheonil-restaurant-next
       dockerfile: Dockerfile
     # image: banhyungil/cheonil-restaurant-next
+    restart: always
     ports:
       - 81:80
     environment:
