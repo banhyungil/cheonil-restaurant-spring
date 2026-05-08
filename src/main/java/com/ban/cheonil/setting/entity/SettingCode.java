@@ -29,4 +29,12 @@ public enum SettingCode {
    * <p>config: {@code {"startHour": 9, "endHour": 20}} (양 끝 inclusive). backend 가 직접 소비.
    */
   OPERATING_HOURS,
+
+  /**
+   * 예약 스케줄러 — 템플릿 → 인스턴스 자동 생성 동작 파라미터.
+   *
+   * <p>config: {@code {"leadMinutes": 60}} — 트리거 시점 기준 몇 분 미래의 rsv_time 을 처리할지.
+   * cron 주기(10분) 이상이어야 누락 없음. backend 가 직접 소비.
+   */
+  RSV_SCHEDULER,
 }

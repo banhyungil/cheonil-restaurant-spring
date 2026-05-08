@@ -2,6 +2,7 @@ package com.ban.cheonil.setting;
 
 import com.ban.cheonil.setting.dto.SettingRes;
 import com.ban.cheonil.setting.entity.OperatingHours;
+import com.ban.cheonil.setting.entity.RsvScheduler;
 import com.ban.cheonil.setting.entity.Setting;
 import com.ban.cheonil.setting.entity.SettingCode;
 import jakarta.persistence.EntityNotFoundException;
@@ -43,6 +44,23 @@ public class SettingService {
     s.setUserConfig(null);
     s.setModAt(OffsetDateTime.now());
     return SettingRes.from(s);
+  }
+
+  /**
+   * 예약 스케줄러 파라미터 — typed view. setting row 누락 / config 필드 누락 시 {@link RsvScheduler#DEFAULT} fallback.
+   */
+  public RsvScheduler getRsvScheduler() {
+    return settingRepo
+        .findById(SettingCode.RSV_SCHEDULER)
+        .map(
+            s -> {
+              Map<String, Object> cfg = s.getEffectiveConfig();
+              if (cfg == null) return RsvScheduler.DEFAULT;
+              Object lead = cfg.get("leadMinutes");
+              if (!(lead instanceof Number)) return RsvScheduler.DEFAULT;
+              return new RsvScheduler(((Number) lead).intValue());
+            })
+        .orElse(RsvScheduler.DEFAULT);
   }
 
   /**
