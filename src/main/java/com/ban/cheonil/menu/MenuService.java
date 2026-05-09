@@ -5,6 +5,8 @@ import java.util.List;
 
 import jakarta.persistence.EntityNotFoundException;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +25,9 @@ public class MenuService {
 
   /**
    * @param includeInactive true 면 비활성 메뉴도 포함 (관리자 페이지용). false 면 활성만 (영업/주문 페이지용).
+   *     <p>캐시 — `menus` 캐시에 includeInactive 키별 저장. mutation 시 전체 evict.
    */
+  @Cacheable(value = "menus", key = "#includeInactive")
   public List<MenuRes> findAll(boolean includeInactive) {
     var menus = includeInactive ? menuRepo.findAll() : menuRepo.findByActiveTrue();
     return menus.stream().map(MenuRes::from).toList();
@@ -34,6 +38,7 @@ public class MenuService {
   }
 
   @Transactional
+  @CacheEvict(value = "menus", allEntries = true)
   public MenuRes create(MenuCreateReq req) {
     Menu m = new Menu();
     apply(m, req);
@@ -45,6 +50,7 @@ public class MenuService {
 
   /** 전체 교체 (PUT). */
   @Transactional
+  @CacheEvict(value = "menus", allEntries = true)
   public MenuRes update(Short seq, MenuCreateReq req) {
     Menu m = get(seq);
     apply(m, req);
@@ -53,6 +59,7 @@ public class MenuService {
   }
 
   @Transactional
+  @CacheEvict(value = "menus", allEntries = true)
   public void remove(Short seq) {
     Menu m = get(seq);
     menuRepo.delete(m);
@@ -60,6 +67,7 @@ public class MenuService {
 
   /** 활성 토글 — PATCH /active. */
   @Transactional
+  @CacheEvict(value = "menus", allEntries = true)
   public void patchActive(Short seq, Boolean active) {
     Menu m = get(seq);
     m.setActive(active);
