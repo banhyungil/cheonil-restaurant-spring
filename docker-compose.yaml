@@ -23,7 +23,7 @@ services:
       POSTGRES_DB: cheonil
     healthcheck:
       # app 컨테이너가 PG ready 까지 대기 — depends_on.condition: service_healthy 와 결합
-      test: [ "CMD-SHELL", "pg_isready -U root -d cheonil" ]
+      test: ["CMD-SHELL", "pg_isready -U root -d cheonil"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -46,9 +46,30 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cheonil
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root1!
+      WHISPER_URL: http://whisper:9000
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - cheonil
+
+  # 자체 호스팅 STT — faster-whisper (small 모델, CPU 최적화).
+  # 첫 실행 시 모델 다운로드 (~600MB) — volume 으로 영속화.
+  # API: POST /asr (multipart audio_file) → { text, language, ... }
+  # @SEE https://github.com/openai/whisper
+  # @SEE https://hub.docker.com/r/onerahmet/openai-whisper-asr-webservice
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: cheonil-whisper
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL_PATH: /data/whisper-models
+    volumes:
+      - v-whisper-models:/data/whisper-models
     networks:
       - cheonil
 
@@ -75,3 +96,4 @@ networks:
 
 volumes:
   v-db:
+  v-whisper-models:

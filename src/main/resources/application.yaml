@@ -37,3 +37,14 @@ springdoc:
     path: /swagger-ui
     tags-sorter: alpha
     operations-sorter: alpha
+
+# 자체 호스팅 Whisper STT 서비스 base URL — docker compose 에선 service name `whisper`.
+# 환경변수 + fallback
+# 환경변수가 없는경우 localhost 주소사용 -> 개발시에도 동작
+whisper:
+  url: ${WHISPER_URL:http://localhost:9000}
+
+# logging:
+#   level:
+#     org.springframework.http.converter: DEBUG
+#     org.springframework.web.client: DEBUG
