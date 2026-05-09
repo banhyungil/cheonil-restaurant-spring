@@ -6,15 +6,27 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.ban.cheonil.menu.MenuService;
 import com.ban.cheonil.menu.dto.MenuRes;
+import com.ban.cheonil.order.OrderService;
+import com.ban.cheonil.order.dto.OrderCreateReq;
+import com.ban.cheonil.order.dto.OrderExtRes;
+import com.ban.cheonil.order.dto.OrderMenuReq;
+import com.ban.cheonil.order.dto.OrderRes;
+import com.ban.cheonil.speech.SpeechService;
+import com.ban.cheonil.speech.dto.SpeechRes;
 import com.ban.cheonil.store.StoreService;
 import com.ban.cheonil.store.dto.StoreRes;
+import com.ban.cheonil.voiceOrder.dto.VoiceOrderCreateRes;
 import com.ban.cheonil.voiceOrder.dto.VoiceOrderItem;
 import com.ban.cheonil.voiceOrder.dto.VoiceOrderRes;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,6 +70,8 @@ public class VoiceOrderService {
 
   private final MenuService menuService;
   private final StoreService storeService;
+  private final SpeechService speechService;
+  private final OrderService orderService;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   // ─── Session 상태 — synchronized parse() 안에서만 mutate ──────────────
@@ -91,14 +105,113 @@ public class VoiceOrderService {
     try {
       JsonNode node = objectMapper.readTree(json);
       Short storeSeq = readShort(node.get("storeSeq"));
-      String memo = readString(node.get("memo"));
-      List<VoiceOrderItem> items = readItems(node.get("items"));
-      return new VoiceOrderRes(storeSeq, items, memo, rawOutput);
+      String cmt = readString(node.get("cmt"));
+      List<VoiceOrderItem> menus = readItems(node.get("menus"));
+      List<String> unmatched = readStringArray(node.get("unmatched"));
+      return new VoiceOrderRes(storeSeq, menus, cmt, unmatched, rawOutput);
     } catch (IOException e) {
       // session 응답 형식이 망가졌을 가능성 — session 무효화 후 재시도하도록 다음 호출 보장
       invalidateSession();
       throw new RuntimeException("claude 응답 JSON 파싱 실패: " + json, e);
     }
+  }
+
+  /**
+   * 음성 → 주문 생성 (end-to-end).
+   *
+   * <p>flow: STT (Whisper) → claude parse → 5-게이트 검증 → {@link OrderService#create} → 확인 멘트 생성.
+   *
+   * <p>검증 게이트 하나라도 실패 시 {@link VoiceOrderValidationException} 으로 차단. 전화 받으며 자동 생성하는 시나리오라 부분 매칭/추측은
+   * 절대 통과시키지 않음.
+   */
+  public VoiceOrderCreateRes createOrderFromAudio(MultipartFile audio) {
+    SpeechRes speech = speechService.transcribe(audio);
+    String text = speech.text();
+    if (text == null || text.isBlank()) {
+      throw new VoiceOrderValidationException(
+          VoiceOrderValidationException.Code.NO_ITEMS, text, null);
+    }
+
+    VoiceOrderRes parsed = parse(text);
+    validate(parsed, text);
+
+    OrderCreateReq req = toOrderCreateReq(parsed);
+    OrderRes created = orderService.create(req);
+    OrderExtRes order = orderService.findExtBySeq(created.seq());
+    String confirmation = buildConfirmation(order);
+    log.info(
+        "[voice-order] created order {} from \"{}\" (storeSeq={}, menus={})",
+        order.seq(),
+        text,
+        parsed.storeSeq(),
+        parsed.menus().size());
+    return new VoiceOrderCreateRes(order, text, confirmation);
+  }
+
+  /** 5-게이트 검증 — 하나라도 실패 시 즉시 throw. */
+  private void validate(VoiceOrderRes parsed, String text) {
+    if (parsed.unmatched() != null && !parsed.unmatched().isEmpty()) {
+      log.warn(
+          "[voice-order] unmatched fragments: input=\"{}\" unmatched={}", text, parsed.unmatched());
+      throw new VoiceOrderValidationException(
+          VoiceOrderValidationException.Code.UNMATCHED_FRAGMENTS, text, parsed);
+    }
+    if (parsed.storeSeq() == null) {
+      throw new VoiceOrderValidationException(
+          VoiceOrderValidationException.Code.STORE_NOT_MATCHED, text, parsed);
+    }
+    if (parsed.menus() == null || parsed.menus().isEmpty()) {
+      throw new VoiceOrderValidationException(
+          VoiceOrderValidationException.Code.NO_ITEMS, text, parsed);
+    }
+    Map<Short, MenuRes> menuBySeq =
+        menuService.findAll(false).stream()
+            .collect(Collectors.toMap(MenuRes::seq, Function.identity()));
+    for (VoiceOrderItem it : parsed.menus()) {
+      if (!menuBySeq.containsKey(it.menuSeq())) {
+        log.warn(
+            "[voice-order] hallucinated menuSeq={} input=\"{}\" parsed={}",
+            it.menuSeq(),
+            text,
+            parsed);
+        throw new VoiceOrderValidationException(
+            VoiceOrderValidationException.Code.INVALID_MENU, text, parsed);
+      }
+      if (it.cnt() == null || it.cnt() <= 0) {
+        throw new VoiceOrderValidationException(
+            VoiceOrderValidationException.Code.INVALID_QUANTITY, text, parsed);
+      }
+    }
+  }
+
+  /** parsed → OrderCreateReq. menu 가격은 활성 메뉴 사전에서 lookup (LLM 가격 추측 방지). */
+  private OrderCreateReq toOrderCreateReq(VoiceOrderRes parsed) {
+    Map<Short, MenuRes> menuBySeq =
+        menuService.findAll(false).stream()
+            .collect(Collectors.toMap(MenuRes::seq, Function.identity()));
+    List<OrderMenuReq> menus =
+        parsed.menus().stream()
+            .map(
+                it -> {
+                  MenuRes m = menuBySeq.get(it.menuSeq());
+                  return new OrderMenuReq(it.menuSeq(), m.price(), it.cnt().shortValue());
+                })
+            .toList();
+    return new OrderCreateReq(parsed.storeSeq(), menus, parsed.cmt());
+  }
+
+  /** TTS 확인 멘트 — "강남점 양념치킨 2, 콜라 1, 덜맵게 — 주문 완료". */
+  private String buildConfirmation(OrderExtRes order) {
+    StringBuilder sb = new StringBuilder();
+    if (order.storeNm() != null) sb.append(order.storeNm()).append(" ");
+    String items =
+        order.menus().stream()
+            .map(m -> m.menuNm() + " " + m.cnt())
+            .collect(Collectors.joining(", "));
+    sb.append(items);
+    if (order.cmt() != null && !order.cmt().isBlank()) sb.append(", ").append(order.cmt());
+    sb.append(" — 주문 완료");
+    return sb.toString();
   }
 
   /** session 무효화 — 다음 호출 시 새로 생성. */
@@ -215,17 +328,19 @@ public class VoiceOrderService {
         # 응답 schema (TypeScript)
         interface VoiceOrderRes {
           storeSeq: number | null   // 매장명 명시되면 매장 seq, 아니면 null
-          items: Array<{ menuSeq: number; cnt: number }>   // 메뉴 + 수량 (필수, 빈 배열 가능)
-          memo: string | null   // 부정/조건/요청사항
+          menus: Array<{ menuSeq: number; cnt: number }>   // 메뉴 + 수량 (필수, 빈 배열 가능)
+          cmt: string | null   // 부정/조건/요청사항
+          unmatched: string[]   // 매장/메뉴 사전에 매칭 못한 발화 조각 (원문 그대로). 모두 매칭되면 빈 배열
         }
 
         # 출력 예시
-        {"storeSeq":1,"items":[{"menuSeq":10,"cnt":2},{"menuSeq":12,"cnt":1}],"memo":"덜맵게"}
+        {"storeSeq":1,"menus":[{"menuSeq":10,"cnt":2},{"menuSeq":12,"cnt":1}],"cmt":"덜맵게","unmatched":[]}
+        {"storeSeq":null,"menus":[{"menuSeq":10,"cnt":1}],"cmt":null,"unmatched":["감자튀김"]}
 
         # 규칙
         - 메뉴명 및 매장명 정확히 일치하지 않아도 가까운 이름으로 매칭
+        - 매칭 실패 시: 추론이 안되는 경우 unmatched 에 원문 그대로 기록
         - 이번 session 동안 위 매장/메뉴 목록과 schema/규칙 그대로 유지. 다음 발화부턴 발화만 보냄.
-        -
         - JSON 변환 만, 다른 텍스트 절대 출력 금지
         """
         .formatted(storesSection, menusSection, userText.replace("\"", "\\\""));
@@ -267,5 +382,10 @@ public class VoiceOrderService {
                     readShort(n.get("menuSeq")), n.get("cnt") != null ? n.get("cnt").asInt(1) : 1))
         .filter(it -> it.menuSeq() != null)
         .toList();
+  }
+
+  private List<String> readStringArray(JsonNode node) {
+    if (node == null || !node.isArray()) return List.of();
+    return node.valueStream().map(n -> n.asText("").trim()).filter(s -> !s.isEmpty()).toList();
   }
 }
