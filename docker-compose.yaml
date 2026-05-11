@@ -52,6 +52,18 @@ services:
         condition: service_healthy
     networks:
       - cheonil
+  # Cloudflare Tunnel — 매장 PC 의 Spring 을 outbound 터널로 외부 노출.
+  # `api.cheonil.org` → Cloudflare Edge → 본 컨테이너 → app:8080.
+  # 토큰은 Cloudflare Zero Trust > Networks > Connectors 에서 발급한 후 .env 에 저장.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cheonil-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+    depends_on:
+      - app
+    networks:
+      - cheonil
 
   # 자체 호스팅 STT — faster-whisper (small 모델, CPU 최적화).
   # 첫 실행 시 모델 다운로드 (~600MB) — volume 으로 영속화.
