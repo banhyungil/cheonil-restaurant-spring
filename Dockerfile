@@ -23,8 +23,15 @@ FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
 COPY --from=build /app/app.jar app.jar
 
-# Spring Boot 기본 포트 — application.yaml 의 server.port 와 일치
+# claude CLI 설치 — VoiceOrderService 가 subprocess 로 호출.
+# 공식 installer 가 호스트 OS/arch 감지해 적절한 바이너리 다운로드.
+# auth 는 docker-compose 에서 ~/.claude 를 /root/.claude 로 mount 함 (이미지에 baked X).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && curl -fsSL https://claude.ai/install.sh | bash \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+ENV PATH="/root/.local/bin:${PATH}"
+
 EXPOSE 8080
 
-# 컨테이너에서 stop 시 SIGTERM 으로 graceful shutdown
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

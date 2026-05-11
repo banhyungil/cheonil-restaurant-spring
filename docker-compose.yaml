@@ -47,6 +47,11 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root1!
       WHISPER_URL: http://whisper:9000
+    volumes:
+      # claude CLI 인증/세션을 named volume 으로 영속화.
+      # 컨테이너 재시작/재빌드 시에도 login 상태 유지. 최초 1회는
+      # `docker compose exec app claude /login` 로 device flow 로 인증 진행.
+      - v-claude:/root/.claude
     depends_on:
       db:
         condition: service_healthy
@@ -109,3 +114,5 @@ networks:
 volumes:
   v-db:
   v-whisper-models:
+  v-claude:
+
