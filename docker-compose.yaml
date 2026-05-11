@@ -47,7 +47,7 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root1!
       WHISPER_URL: http://whisper:9000
-      MELOTTS_URL: http://melotts:8000
+      GOOGLE_TTS_API_KEY: ${GOOGLE_TTS_API_KEY}
     volumes:
       # claude CLI 인증/세션을 named volume 으로 영속화.
       # 컨테이너 재시작/재빌드 시에도 login 상태 유지. 최초 1회는
@@ -91,28 +91,6 @@ services:
     networks:
       - cheonil
 
-  # 자체 호스팅 TTS — MeloTTS (한국어, CPU 추론).
-  # 첫 합성 시 HuggingFace 에서 모델 자동 다운로드 (~1GB) — volume 으로 영속화.
-  # API: POST /tts {text, speed, format} → audio bytes (mp3/wav).
-  # Spring 의 /api/tts 엔드포인트가 디스크 캐시 + 프록시 담당.
-  # @SEE https://github.com/myshell-ai/MeloTTS
-  melotts:
-    build:
-      context: ./docker/melotts
-      dockerfile: Dockerfile
-    container_name: cheonil-melotts
-    restart: always
-    ports:
-      - "9100:8000"
-    environment:
-      MELO_LANGUAGE: KR
-      # CPU 추론 thread 제한 — Whisper 와 자원 경합 완화. 매장 PC 코어 수에 맞춰 조정.
-      OMP_NUM_THREADS: "2"
-    volumes:
-      - v-melotts-models:/root/.cache/huggingface
-    networks:
-      - cheonil
-
   web:
     container_name: cheonil-web
     build:
@@ -137,5 +115,4 @@ networks:
 volumes:
   v-db:
   v-whisper-models:
-  v-melotts-models:
   v-claude:

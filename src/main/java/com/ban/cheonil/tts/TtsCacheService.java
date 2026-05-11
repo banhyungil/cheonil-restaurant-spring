@@ -45,8 +45,8 @@ public class TtsCacheService {
     log.info("tts cache dir={} maxSize={}MB", cacheDir, maxSizeBytes / 1024 / 1024);
   }
 
-  public String keyOf(String text, double speed, int gainDb) {
-    String raw = text + "|" + speed + "|" + gainDb;
+  public String keyOf(String text, double speed, int gainDb, String voice) {
+    String raw = text + "|" + speed + "|" + gainDb + "|" + voice;
     try {
       MessageDigest md = MessageDigest.getInstance("SHA-256");
       byte[] digest = md.digest(raw.getBytes(StandardCharsets.UTF_8));
