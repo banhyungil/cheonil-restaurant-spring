@@ -23,7 +23,7 @@ services:
       POSTGRES_DB: cheonil
     healthcheck:
       # app 컨테이너가 PG ready 까지 대기 — depends_on.condition: service_healthy 와 결합
-      test: [ "CMD-SHELL", "pg_isready -U root -d cheonil" ]
+      test: ["CMD-SHELL", "pg_isready -U root -d cheonil"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -46,9 +46,70 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cheonil
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root1!
+      WHISPER_URL: http://whisper:9000
+      MELOTTS_URL: http://melotts:8000
+    volumes:
+      # claude CLI 인증/세션을 named volume 으로 영속화.
+      # 컨테이너 재시작/재빌드 시에도 login 상태 유지. 최초 1회는
+      # `docker compose exec app claude /login` 로 device flow 로 인증 진행.
+      - v-claude:/root/.claude
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - cheonil
+  # Cloudflare Tunnel — 매장 PC 의 Spring 을 outbound 터널로 외부 노출.
+  # `api.cheonil.org` → Cloudflare Edge → 본 컨테이너 → app:8080.
+  # 토큰은 Cloudflare Zero Trust > Networks > Connectors 에서 발급한 후 .env 에 저장.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cheonil-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+    depends_on:
+      - app
+    networks:
+      - cheonil
+
+  # 자체 호스팅 STT — faster-whisper (small 모델, CPU 최적화).
+  # 첫 실행 시 모델 다운로드 (~600MB) — volume 으로 영속화.
+  # API: POST /asr (multipart audio_file) → { text, language, ... }
+  # @SEE https://github.com/openai/whisper
+  # @SEE https://hub.docker.com/r/onerahmet/openai-whisper-asr-webservice
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: cheonil-whisper
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL_PATH: /data/whisper-models
+    volumes:
+      - v-whisper-models:/data/whisper-models
+    networks:
+      - cheonil
+
+  # 자체 호스팅 TTS — MeloTTS (한국어, CPU 추론).
+  # 첫 합성 시 HuggingFace 에서 모델 자동 다운로드 (~1GB) — volume 으로 영속화.
+  # API: POST /tts {text, speed, format} → audio bytes (mp3/wav).
+  # Spring 의 /api/tts 엔드포인트가 디스크 캐시 + 프록시 담당.
+  # @SEE https://github.com/myshell-ai/MeloTTS
+  melotts:
+    build:
+      context: ./docker/melotts
+      dockerfile: Dockerfile
+    container_name: cheonil-melotts
+    restart: always
+    ports:
+      - "9100:8000"
+    environment:
+      MELO_LANGUAGE: KR
+      # CPU 추론 thread 제한 — Whisper 와 자원 경합 완화. 매장 PC 코어 수에 맞춰 조정.
+      OMP_NUM_THREADS: "2"
+    volumes:
+      - v-melotts-models:/root/.cache/huggingface
     networks:
       - cheonil
 
@@ -75,3 +136,7 @@ networks:
 
 volumes:
   v-db:
+  v-whisper-models:
+  v-melotts-models:
+  v-claude:
+

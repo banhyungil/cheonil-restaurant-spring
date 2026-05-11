@@ -37,3 +37,9 @@ out/
 .vscode/
 
 docs/migration/node_modules
+
+# 환경변수 — 비밀 (Cloudflare 토큰 등). .env.example 만 커밋
+.env
+.env.local
+.env.*.local
+!.env.example

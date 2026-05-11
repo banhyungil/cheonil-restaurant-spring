@@ -5,6 +5,8 @@ import java.util.List;
 
 import jakarta.persistence.EntityNotFoundException;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +25,9 @@ public class StoreService {
 
   /**
    * @param includeInactive true 면 비활성 매장도 포함 (관리자 페이지용). false 면 활성만 (영업/주문 페이지용).
+   *     <p>캐시 — `stores` 캐시에 includeInactive 키별 저장. mutation 시 전체 evict.
    */
+  @Cacheable(value = "stores", key = "#includeInactive")
   public List<StoreRes> findAll(boolean includeInactive) {
     var stores = includeInactive ? storeRepo.findAll() : storeRepo.findByActiveTrue();
     return stores.stream().map(StoreRes::from).toList();
@@ -34,6 +38,7 @@ public class StoreService {
   }
 
   @Transactional
+  @CacheEvict(value = "stores", allEntries = true)
   public StoreRes create(StoreCreateReq req) {
     Store s = new Store();
     apply(s, req);
@@ -45,6 +50,7 @@ public class StoreService {
 
   /** 전체 교체 (PUT). latitude/longitude/options 는 보존 (관리 UI 미노출). */
   @Transactional
+  @CacheEvict(value = "stores", allEntries = true)
   public StoreRes update(Short seq, StoreCreateReq req) {
     Store s = get(seq);
     apply(s, req);
@@ -53,6 +59,7 @@ public class StoreService {
   }
 
   @Transactional
+  @CacheEvict(value = "stores", allEntries = true)
   public void remove(Short seq) {
     Store s = get(seq);
     storeRepo.delete(s);
@@ -60,6 +67,7 @@ public class StoreService {
 
   /** 활성 토글 — PATCH /active. */
   @Transactional
+  @CacheEvict(value = "stores", allEntries = true)
   public void patchActive(Short seq, Boolean active) {
     Store s = get(seq);
     s.setActive(active);

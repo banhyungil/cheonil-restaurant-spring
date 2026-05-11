@@ -2,6 +2,7 @@ package com.ban.cheonil.common.exception;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -11,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.ban.cheonil.voiceOrder.VoiceOrderValidationException;
 
 /** REST API 전역 예외 처리. 컨트롤러에서 throw 된 예외를 일관된 JSON 응답으로 변환. */
 @RestControllerAdvice
@@ -55,6 +58,22 @@ public class GlobalExceptionHandler {
           default -> "데이터 무결성 제약 위반";
         };
     return body(HttpStatus.CONFLICT, message);
+  }
+
+  /**
+   * 음성 주문 검증 실패 → 400. 어떤 게이트가 실패했는지 {@code code} 필드로 구분 (프론트가 TTS 멘트 분기에 사용).
+   * {@code transcribedText} / {@code parsed} 는 디버깅용으로 같이 노출.
+   */
+  @ExceptionHandler(VoiceOrderValidationException.class)
+  public ResponseEntity<Map<String, Object>> voiceOrderInvalid(VoiceOrderValidationException e) {
+    Map<String, Object> body = new HashMap<>();
+    body.put("status", HttpStatus.BAD_REQUEST.value());
+    body.put("code", e.code().name());
+    body.put("message", e.getMessage());
+    body.put("transcribedText", e.transcribedText());
+    body.put("parsed", e.parsed());
+    body.put("timestamp", OffsetDateTime.now().toString());
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
   }
 
   private ResponseEntity<Map<String, Object>> body(HttpStatus status, String message) {

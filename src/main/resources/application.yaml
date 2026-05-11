@@ -37,3 +37,25 @@ springdoc:
     path: /swagger-ui
     tags-sorter: alpha
     operations-sorter: alpha
+
+# 자체 호스팅 Whisper STT 서비스 base URL — docker compose 에선 service name `whisper`.
+# 환경변수 + fallback
+# 환경변수가 없는경우 localhost 주소사용 -> 개발시에도 동작
+whisper:
+  url: ${WHISPER_URL:http://localhost:9000}
+
+# 자체 호스팅 MeloTTS TTS 서비스 base URL — docker compose 에선 service name `melotts`.
+melotts:
+  url: ${MELOTTS_URL:http://localhost:9100}
+
+# TTS mp3 디스크 캐시 — 동일 (text, speed) 재요청 시 즉시 응답.
+# dir 미지정 시 `${java.io.tmpdir}/melotts-cache` 사용 → 재기동 시 자연 초기화.
+tts:
+  cache:
+    dir: ${TTS_CACHE_DIR:${java.io.tmpdir}/melotts-cache}
+    max-size-mb: 200
+
+# logging:
+#   level:
+#     org.springframework.http.converter: DEBUG
+#     org.springframework.web.client: DEBUG
