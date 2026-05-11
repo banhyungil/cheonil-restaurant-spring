@@ -38,17 +38,22 @@ public class TtsService {
   @Value("${google.tts.api-key}")
   private String apiKey;
 
-  /** 한국어 화자 — 기본값 Chirp 3 HD Achernar (여, 차분). env 로 override 가능. */
+  /** 한국어 화자 기본값 — 요청에 voice 미지정 시 사용. env 로 override 가능. */
   @Value("${google.tts.voice:ko-KR-Chirp3-HD-Achernar}")
-  private String voice;
+  private String defaultVoice;
 
   @Value("${google.tts.language-code:ko-KR}")
   private String languageCode;
 
   public record Result(byte[] bytes, boolean cacheHit) {}
 
-  public Result synthesize(String text, double speed, int gainDb) {
-    String key = cache.keyOf(text, speed, gainDb, voice);
+  /**
+   * @param voice null/blank 시 {@link #defaultVoice} 사용. 그 외 풀 네임 그대로 (예: {@code
+   *     ko-KR-Chirp3-HD-Aoede}).
+   */
+  public Result synthesize(String text, double speed, int gainDb, String voice) {
+    String effectiveVoice = (voice == null || voice.isBlank()) ? defaultVoice : voice;
+    String key = cache.keyOf(text, speed, gainDb, effectiveVoice);
 
     byte[] cached = cache.get(key);
     if (cached != null) {
@@ -64,7 +69,7 @@ public class TtsService {
     Map<String, Object> body =
         Map.of(
             "input", Map.of("text", text),
-            "voice", Map.of("languageCode", languageCode, "name", voice),
+            "voice", Map.of("languageCode", languageCode, "name", effectiveVoice),
             "audioConfig",
                 Map.of(
                     "audioEncoding", "MP3",

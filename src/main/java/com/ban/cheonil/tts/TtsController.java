@@ -29,7 +29,8 @@ public class TtsController {
   public ResponseEntity<byte[]> synthesize(
       @RequestParam String text,
       @RequestParam(defaultValue = "1.0") double speed,
-      @RequestParam(defaultValue = "0") int gainDb) {
+      @RequestParam(defaultValue = "0") int gainDb,
+      @RequestParam(required = false) String voice) {
 
     if (text == null || text.isBlank()) {
       return ResponseEntity.badRequest().build();
@@ -41,7 +42,7 @@ public class TtsController {
       return ResponseEntity.badRequest().build();
     }
 
-    Result r = ttsService.synthesize(text, speed, gainDb);
+    Result r = ttsService.synthesize(text, speed, gainDb, voice);
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.parseMediaType("audio/mpeg"));
