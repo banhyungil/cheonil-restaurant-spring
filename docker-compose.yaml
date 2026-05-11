@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile
     # image: banhyungil/cheonil-restaurant-spring
-    container_name: cheonil-server2
+    container_name: cheonil-server
     restart: always
     ports:
       - "8080:8080"
@@ -121,7 +121,7 @@ services:
     # image: banhyungil/cheonil-restaurant-next
     restart: always
     ports:
-      - 81:80
+      - 80:80
     environment:
       API_BACKEND_URL: http://app:8080
     depends_on:
@@ -139,4 +139,3 @@ volumes:
   v-whisper-models:
   v-melotts-models:
   v-claude:
-
