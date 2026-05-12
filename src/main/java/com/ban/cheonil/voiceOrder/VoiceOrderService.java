@@ -121,11 +121,47 @@ public class VoiceOrderService {
    *
    * <p>flow: STT (Whisper) → claude parse → 5-게이트 검증 → {@link OrderService#create} → 확인 멘트 생성.
    *
+   * <p><b>Fallback</b>: Whisper STT 정확도가 떨어져 검증 실패 시 Google Cloud STT 로 자동 재시도. Google API quota
+   * 초과 등 호출 실패는 catch 해서 원본(Whisper) 실패를 그대로 propagate — 사용자에겐 일관된 에러.
+   *
    * <p>검증 게이트 하나라도 실패 시 {@link VoiceOrderValidationException} 으로 차단. 전화 받으며 자동 생성하는 시나리오라 부분 매칭/추측은
    * 절대 통과시키지 않음.
    */
   public VoiceOrderCreateRes createOrderFromAudio(MultipartFile audio) {
-    SpeechRes speech = speechService.transcribe(audio);
+    // byte[] 한 번만 읽어 두 엔진에 재사용 — MultipartFile.getBytes() 는 stream 이라 반복 안 됨.
+    byte[] bytes;
+    try {
+      bytes = audio.getBytes();
+    } catch (IOException e) {
+      throw new RuntimeException("audio read failed", e);
+    }
+    String contentType =
+        audio.getContentType() != null ? audio.getContentType() : "audio/webm";
+    String filename =
+        audio.getOriginalFilename() != null ? audio.getOriginalFilename() : "audio.webm";
+
+    try {
+      return tryCreateOrder(bytes, filename, contentType, SpeechService.Engine.WHISPER);
+    } catch (VoiceOrderValidationException whisperFail) {
+      log.info(
+          "[voice-order] whisper attempt failed ({}), retrying with google STT",
+          whisperFail.code());
+      try {
+        return tryCreateOrder(bytes, filename, contentType, SpeechService.Engine.GOOGLE);
+      } catch (VoiceOrderValidationException googleFail) {
+        // 둘 다 validation 실패 → 더 최근(google) 결과로 사용자에게 노출 (보통 더 정확)
+        throw googleFail;
+      } catch (RuntimeException googleApiFail) {
+        // Google API 자체 에러 (quota, 네트워크 등) → 원본 whisper 실패를 propagate
+        log.warn("[voice-order] google STT call failed, falling back to whisper error", googleApiFail);
+        throw whisperFail;
+      }
+    }
+  }
+
+  private VoiceOrderCreateRes tryCreateOrder(
+      byte[] bytes, String filename, String contentType, SpeechService.Engine engine) {
+    SpeechRes speech = speechService.transcribe(bytes, filename, contentType, engine);
     String text = speech.text();
     if (text == null || text.isBlank()) {
       throw new VoiceOrderValidationException(
@@ -140,12 +176,13 @@ public class VoiceOrderService {
     OrderExtRes order = orderService.findExtBySeq(created.seq());
     String confirmation = buildConfirmation(order);
     log.info(
-        "[voice-order] created order {} from \"{}\" (storeSeq={}, menus={})",
+        "[voice-order] created order {} from \"{}\" (engine={}, storeSeq={}, menus={})",
         order.seq(),
         text,
+        engine,
         parsed.storeSeq(),
         parsed.menus().size());
-    return new VoiceOrderCreateRes(order, text, confirmation);
+    return new VoiceOrderCreateRes(order, text, confirmation, engine.name());
   }
 
   /** 5-게이트 검증 — 하나라도 실패 시 즉시 throw. */

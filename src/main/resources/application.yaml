@@ -44,13 +44,18 @@ springdoc:
 whisper:
   url: ${WHISPER_URL:http://localhost:9000}
 
-# Google Cloud Text-to-Speech — API key 는 .env 의 GOOGLE_TTS_API_KEY.
-# voice 변경 시 캐시 키에 voice 포함이라 자연스럽게 신규 캐시 항목으로 분리됨.
+# Google Cloud APIs — TTS + STT 통합. API key 는 .env 의 GOOGLE_API_KEY.
+# 콘솔에서 키별 사용 한도(quota)를 cap 해두면 초과 시 자동으로 429 반환 → 앱은 메시지만.
 google:
+  api-key: ${GOOGLE_API_KEY:}
   tts:
-    api-key: ${GOOGLE_TTS_API_KEY:}
     voice: ${GOOGLE_TTS_VOICE:ko-KR-Chirp3-HD-Achernar}
     language-code: ${GOOGLE_TTS_LANGUAGE_CODE:ko-KR}
+  stt:
+    language-code: ${GOOGLE_STT_LANGUAGE_CODE:ko-KR}
+    # 인식 모델 — latest_short(Chirp 단문, 주문 적합), latest_long(긴 발화), default(범용),
+    # command_and_search(짧은 쿼리). 매장 주문은 단문이라 latest_short.
+    model: ${GOOGLE_STT_MODEL:latest_short}
 
 # TTS mp3 디스크 캐시 — 동일 (text, speed, gainDb, voice) 재요청 시 즉시 응답.
 # dir 미지정 시 `${java.io.tmpdir}/tts-cache` 사용 → 재기동 시 자연 초기화.

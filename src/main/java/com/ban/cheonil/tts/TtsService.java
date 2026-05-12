@@ -35,7 +35,7 @@ public class TtsService {
   private final RestTemplate restTemplate = new RestTemplate();
   private final TtsCacheService cache;
 
-  @Value("${google.tts.api-key}")
+  @Value("${google.api-key}")
   private String apiKey;
 
   /** 한국어 화자 기본값 — 요청에 voice 미지정 시 사용. env 로 override 가능. */
