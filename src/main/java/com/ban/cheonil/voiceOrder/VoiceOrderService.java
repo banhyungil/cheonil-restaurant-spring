@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -22,13 +23,14 @@ import com.ban.cheonil.order.dto.OrderCreateReq;
 import com.ban.cheonil.order.dto.OrderExtRes;
 import com.ban.cheonil.order.dto.OrderMenuReq;
 import com.ban.cheonil.order.dto.OrderRes;
+import com.ban.cheonil.speech.AudioNormalizer;
 import com.ban.cheonil.speech.SpeechService;
-import com.ban.cheonil.speech.dto.SpeechRes;
 import com.ban.cheonil.store.StoreService;
 import com.ban.cheonil.store.dto.StoreRes;
 import com.ban.cheonil.voiceOrder.dto.VoiceOrderCreateRes;
 import com.ban.cheonil.voiceOrder.dto.VoiceOrderItem;
 import com.ban.cheonil.voiceOrder.dto.VoiceOrderRes;
+import com.ban.cheonil.voiceOrder.entity.VoiceOrderLog;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -71,7 +73,9 @@ public class VoiceOrderService {
   private final MenuService menuService;
   private final StoreService storeService;
   private final SpeechService speechService;
+  private final AudioNormalizer audioNormalizer;
   private final OrderService orderService;
+  private final VoiceOrderLogService logService;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   // ─── Session 상태 — synchronized parse() 안에서만 mutate ──────────────
@@ -79,8 +83,9 @@ public class VoiceOrderService {
   private Instant sessionStartedAt;
   private String contextHash;
 
-  public synchronized VoiceOrderRes parse(String userText) {
-    if (userText == null || userText.isBlank()) {
+  /** 발화 텍스트를 주문 생성 json으로 파싱 claude cli가 수행 */
+  public synchronized VoiceOrderRes parseToOrder(String speechText) {
+    if (speechText == null || speechText.isBlank()) {
       throw new IllegalArgumentException("text is empty");
     }
 
@@ -92,10 +97,12 @@ public class VoiceOrderService {
       sessionId = UUID.randomUUID().toString();
       sessionStartedAt = Instant.now();
       contextHash = currentHash;
-      prompt = buildFullPrompt(userText);
+      // 첫 세션시 사전 컨텍스트 설정
+      prompt = buildFullPrompt(speechText);
       log.info("[voice-order] new session: {}", sessionId);
     } else {
-      prompt = buildShortPrompt(userText);
+      // 기존 세션 시 텍스트만 전달
+      prompt = buildShortPrompt(speechText);
       log.debug("[voice-order] reuse session: {}", sessionId);
     }
 
@@ -119,62 +126,170 @@ public class VoiceOrderService {
   /**
    * 음성 → 주문 생성 (end-to-end).
    *
-   * <p>flow: STT (Whisper) → claude parse → 5-게이트 검증 → {@link OrderService#create} → 확인 멘트 생성.
+   * <p>흐름 (선형 if 분기):
    *
-   * <p><b>Fallback</b>: Whisper STT 정확도가 떨어져 검증 실패 시 Google Cloud STT 로 자동 재시도. Google API quota
-   * 초과 등 호출 실패는 catch 해서 원본(Whisper) 실패를 그대로 propagate — 사용자에겐 일관된 에러.
+   * <ol>
+   *   <li>오디오 저장 + log entity 초기화
+   *   <li>Whisper STT → parse&validate → valid 면 주문 생성 후 return
+   *   <li>invalid 또는 STT 실패면 Google STT → parse&validate → valid 면 주문 생성 후 return
+   *   <li>둘 다 invalid 면 Google 의 실패 throw / 둘 다 STT 자체 실패면 합성 예외 throw
+   *   <li>finally: 어떤 경로든 log entry 저장
+   * </ol>
    *
-   * <p>검증 게이트 하나라도 실패 시 {@link VoiceOrderValidationException} 으로 차단. 전화 받으며 자동 생성하는 시나리오라 부분 매칭/추측은
-   * 절대 통과시키지 않음.
+   * <p>전화 받으며 자동 생성하는 시나리오라 부분 매칭/추측은 절대 통과시키지 않음 — {@link #validate} 의 5-게이트.
    */
   public VoiceOrderCreateRes createOrderFromAudio(MultipartFile audio) {
-    // byte[] 한 번만 읽어 두 엔진에 재사용 — MultipartFile.getBytes() 는 stream 이라 반복 안 됨.
+    AudioPayload original = readAudio(audio);
+    VoiceOrderLog entry = initLogEntry(original); // 원본은 디스크/DB 에 그대로 저장 (재생/감사용).
+
+    // STT 호출 시엔 정규화된 WAV 16kHz mono 사용 — 모바일/브라우저 컨테이너 다양성 + MIME mismatch 회피.
+    // 정규화 실패 시 (ffmpeg 부재 등) 원본으로 fallback.
+    AudioPayload sttPayload;
+    try {
+      byte[] wav = audioNormalizer.toWav16kMono(original.bytes());
+      sttPayload = new AudioPayload(wav, "audio.wav", "audio/wav");
+      log.info("[voice-order] audio normalized: {} bytes → {} bytes (wav 16kHz mono)",
+          original.bytes().length, wav.length);
+    } catch (IOException e) {
+      log.warn("[voice-order] audio normalize failed, using original ({})", e.getMessage());
+      sttPayload = original;
+    }
+
+    try {
+      // ─── 1차: Whisper ───────────────────────────────────────
+      Optional<String> whisperText = transcribe(sttPayload, SpeechService.Engine.WHISPER, entry);
+      if (whisperText.isPresent()) {
+        ParseResult r = parseAndValidate(whisperText.get());
+        if (r.isValid()) {
+          return createOrderFrom(
+              r.parsed(), whisperText.get(), SpeechService.Engine.WHISPER, entry);
+        }
+        log.info("[voice-order] whisper parse/validate invalid ({}), retry google", r.failure().code());
+      }
+
+      // ─── 2차: Google ────────────────────────────────────────
+      Optional<String> googleText = transcribe(sttPayload, SpeechService.Engine.GOOGLE, entry);
+      if (googleText.isPresent()) {
+        ParseResult r = parseAndValidate(googleText.get());
+        if (r.isValid()) {
+          return createOrderFrom(
+              r.parsed(), googleText.get(), SpeechService.Engine.GOOGLE, entry);
+        }
+        // Google parse 실패 — 양쪽 invalid 로 종결.
+        log.warn(
+            "[voice-order] both engines parse/validate invalid (final={})", r.failure().code());
+        entry.setErrorMessage(r.failure().code() + ": " + r.failure().getMessage());
+        throw r.failure();
+      }
+
+      // 양쪽 STT 자체 실패 — entry.whisper/googleText 에 마커 기록됨.
+      String msg = "STT 양쪽 모두 호출 실패 (whisper + google)";
+      log.warn("[voice-order] {}", msg);
+      entry.setErrorMessage(msg);
+      throw new IllegalStateException(msg);
+    } finally {
+      try {
+        logService.save(entry);
+      } catch (Exception e) {
+        // 로그 저장 실패는 사용자 흐름에 영향 X — 경고만.
+        log.warn("[voice-order] failed to save log entry", e);
+      }
+    }
+  }
+
+  // ─── 헬퍼 ──────────────────────────────────────────────────
+
+  /** 오디오 입력 한 번 읽어 두 엔진에 재사용 (MultipartFile 은 stream 이라 반복 안 됨). */
+  private record AudioPayload(byte[] bytes, String filename, String contentType) {}
+
+  /** parse + validate 결과 — 양자택일 (예외 throw 대신 if 분기 가능). */
+  private record ParseResult(VoiceOrderRes parsed, VoiceOrderValidationException failure) {
+    boolean isValid() {
+      return failure == null;
+    }
+
+    static ParseResult valid(VoiceOrderRes parsed) {
+      return new ParseResult(parsed, null);
+    }
+
+    static ParseResult invalid(VoiceOrderValidationException e) {
+      return new ParseResult(null, e);
+    }
+  }
+
+  private AudioPayload readAudio(MultipartFile audio) {
     byte[] bytes;
     try {
       bytes = audio.getBytes();
     } catch (IOException e) {
       throw new RuntimeException("audio read failed", e);
     }
-    String contentType =
-        audio.getContentType() != null ? audio.getContentType() : "audio/webm";
+    String contentType = audio.getContentType() != null ? audio.getContentType() : "audio/webm";
     String filename =
         audio.getOriginalFilename() != null ? audio.getOriginalFilename() : "audio.webm";
+    return new AudioPayload(bytes, filename, contentType);
+  }
 
+  private VoiceOrderLog initLogEntry(AudioPayload p) {
+    String audioPath;
     try {
-      return tryCreateOrder(bytes, filename, contentType, SpeechService.Engine.WHISPER);
-    } catch (VoiceOrderValidationException whisperFail) {
-      log.info(
-          "[voice-order] whisper attempt failed ({}), retrying with google STT",
-          whisperFail.code());
-      try {
-        return tryCreateOrder(bytes, filename, contentType, SpeechService.Engine.GOOGLE);
-      } catch (VoiceOrderValidationException googleFail) {
-        // 둘 다 validation 실패 → 더 최근(google) 결과로 사용자에게 노출 (보통 더 정확)
-        throw googleFail;
-      } catch (RuntimeException googleApiFail) {
-        // Google API 자체 에러 (quota, 네트워크 등) → 원본 whisper 실패를 propagate
-        log.warn("[voice-order] google STT call failed, falling back to whisper error", googleApiFail);
-        throw whisperFail;
+      audioPath = logService.saveAudio(p.bytes(), p.contentType());
+    } catch (IOException e) {
+      throw new RuntimeException("audio save failed", e);
+    }
+    VoiceOrderLog entry = new VoiceOrderLog();
+    entry.setAudioPath(audioPath);
+    entry.setAudioMime(p.contentType());
+    entry.setAudioSizeBytes(p.bytes().length);
+    return entry;
+  }
+
+  /**
+   * STT 호출 + entry 에 텍스트 기록. 성공: text Optional, 실패(HTTP/network 등): 마커 기록 후 empty.
+   *
+   * <p>throw 안 함 — 호출자가 isPresent 로 분기하면 됨. STT 자체 실패는 부수 케이스로 처리.
+   */
+  private Optional<String> transcribe(
+      AudioPayload p, SpeechService.Engine engine, VoiceOrderLog entry) {
+    try {
+      String text = speechService.transcribe(p.bytes(), p.filename(), p.contentType(), engine).text();
+      recordText(entry, engine, text);
+      if (text == null || text.isBlank()) {
+        log.info("[voice-order] {} returned empty text (audio={} bytes)", engine, p.bytes().length);
+        return Optional.empty();
       }
+      log.info("[voice-order] {} transcribed: \"{}\"", engine, text);
+      return Optional.of(text);
+    } catch (RuntimeException e) {
+      log.info("[voice-order] {} STT call failed: {}", engine, e.getMessage());
+      recordText(entry, engine, "[STT failed: " + e.getClass().getSimpleName() + " " + e.getMessage() + "]");
+      return Optional.empty();
     }
   }
 
-  private VoiceOrderCreateRes tryCreateOrder(
-      byte[] bytes, String filename, String contentType, SpeechService.Engine engine) {
-    SpeechRes speech = speechService.transcribe(bytes, filename, contentType, engine);
-    String text = speech.text();
-    if (text == null || text.isBlank()) {
-      throw new VoiceOrderValidationException(
-          VoiceOrderValidationException.Code.NO_ITEMS, text, null);
+  /** parse(claude) + 5-게이트 검증. throw 대신 ParseResult 로 반환. */
+  private ParseResult parseAndValidate(String text) {
+    try {
+      VoiceOrderRes parsed = parseToOrder(text);
+      validate(parsed, text);
+      return ParseResult.valid(parsed);
+    } catch (VoiceOrderValidationException e) {
+      return ParseResult.invalid(e);
     }
+  }
 
-    VoiceOrderRes parsed = parse(text);
-    validate(parsed, text);
-
+  /** valid 한 parsed 데이터로 실제 주문 생성 + entry 마무리. */
+  private VoiceOrderCreateRes createOrderFrom(
+      VoiceOrderRes parsed, String text, SpeechService.Engine engine, VoiceOrderLog entry) {
     OrderCreateReq req = toOrderCreateReq(parsed);
     OrderRes created = orderService.create(req);
     OrderExtRes order = orderService.findExtBySeq(created.seq());
     String confirmation = buildConfirmation(order);
+
+    entry.setEngineUsed(engine.name());
+    entry.setFinalText(text);
+    entry.setOrderSeq(order.seq());
+
     log.info(
         "[voice-order] created order {} from \"{}\" (engine={}, storeSeq={}, menus={})",
         order.seq(),
@@ -183,6 +298,11 @@ public class VoiceOrderService {
         parsed.storeSeq(),
         parsed.menus().size());
     return new VoiceOrderCreateRes(order, text, confirmation, engine.name());
+  }
+
+  private static void recordText(VoiceOrderLog entry, SpeechService.Engine engine, String text) {
+    if (engine == SpeechService.Engine.WHISPER) entry.setWhisperText(text);
+    else entry.setGoogleText(text);
   }
 
   /** 5-게이트 검증 — 하나라도 실패 시 즉시 throw. */

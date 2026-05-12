@@ -24,14 +24,13 @@ public class VoiceOrderController {
   /** 사용자 발화 텍스트 → 매장/메뉴 매칭된 주문 구조 데이터 (검증/디버깅 페이지 용도). */
   @PostMapping
   public VoiceOrderRes parse(@RequestBody VoiceOrderReq req) {
-    return voiceOrderService.parse(req.text());
+    return voiceOrderService.parseToOrder(req.text());
   }
 
   /**
    * 음성 → 주문 생성 (end-to-end). 음성 버튼 → 녹음 → 본 endpoint 한 번 호출 → 주문 생성 + 확인 멘트 반환.
    *
-   * <p>매칭 실패 (매장 미지정 / 메뉴 추측 / 사전 외 항목 등) 시 {@link VoiceOrderValidationException} → 4xx
-   * 응답으로 차단.
+   * <p>매칭 실패 (매장 미지정 / 메뉴 추측 / 사전 외 항목 등) 시 {@link VoiceOrderValidationException} → 4xx 응답으로 차단.
    */
   @PostMapping(path = "/create-order", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public VoiceOrderCreateRes createOrder(@RequestPart("audio") MultipartFile audio) {

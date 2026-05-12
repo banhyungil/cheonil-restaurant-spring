@@ -26,8 +26,11 @@ COPY --from=build /app/app.jar app.jar
 # claude CLI 설치 — VoiceOrderService 가 subprocess 로 호출.
 # 공식 installer 가 호스트 OS/arch 감지해 적절한 바이너리 다운로드.
 # auth 는 docker-compose 에서 ~/.claude 를 /root/.claude 로 mount 함 (이미지에 baked X).
+#
+# ffmpeg — AudioNormalizer 가 subprocess 로 호출 (모바일/브라우저 다양한 컨테이너 → WAV 16kHz mono 정규화).
+# 같은 음성을 Whisper/Google STT 둘 다에 일관 포맷으로 전달.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates ffmpeg \
  && curl -fsSL https://claude.ai/install.sh | bash \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 ENV PATH="/root/.local/bin:${PATH}"

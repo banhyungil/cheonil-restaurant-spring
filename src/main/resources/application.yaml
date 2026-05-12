@@ -64,6 +64,16 @@ tts:
     dir: ${TTS_CACHE_DIR:${java.io.tmpdir}/tts-cache}
     max-size-mb: 200
 
+# 음성 주문 로그 (Level 1) — 오디오 파일 + DB row 저장 (감사/디버깅/fine-tuning).
+# 기본 경로는 로컬 bootRun 도 동작하도록 tmpdir. 운영(docker-compose)에서는
+# VOICE_ORDER_LOG_DIR=/data/voice-orders 로 override + named volume 마운트.
+# retention-days 일 초과한 row 는 매일 04:00 자동 삭제 (파일 + DB row).
+voice-order:
+  log:
+    dir: ${VOICE_ORDER_LOG_DIR:${java.io.tmpdir}/voice-orders}
+    retention-days: ${VOICE_ORDER_LOG_RETENTION_DAYS:365}
+    cleanup-cron: ${VOICE_ORDER_LOG_CLEANUP_CRON:0 0 4 * * *}
+
 # logging:
 #   level:
 #     org.springframework.http.converter: DEBUG

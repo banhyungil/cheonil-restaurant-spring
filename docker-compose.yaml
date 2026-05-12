@@ -48,11 +48,16 @@ services:
       SPRING_DATASOURCE_PASSWORD: root1!
       WHISPER_URL: http://whisper:9000
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      # 음성 주문 로그 audio 저장 경로 — named volume v-voice-orders 마운트 위치.
+      VOICE_ORDER_LOG_DIR: /data/voice-orders
     volumes:
       # claude CLI 인증/세션을 named volume 으로 영속화.
       # 컨테이너 재시작/재빌드 시에도 login 상태 유지. 최초 1회는
       # `docker compose exec app claude /login` 로 device flow 로 인증 진행.
       - v-claude:/root/.claude
+      # 음성 주문 오디오 파일 — t_voice_order_log.audio_path 가 참조.
+      # retention(기본 365일) 초과 시 매일 04:00 자동 삭제.
+      - v-voice-orders:/data/voice-orders
     depends_on:
       db:
         condition: service_healthy
@@ -116,3 +121,4 @@ volumes:
   v-db:
   v-whisper-models:
   v-claude:
+  v-voice-orders:
