@@ -84,19 +84,23 @@ public class SalesService {
 
     // 그날 주문 — 매출 / 결제 / 미수 모두 orderAt 기준 (다음날 수금된 결제도 주문일자에 귀속).
     List<Order> dayOrders = orderRepo.findAll(baseDateRange(dayRange));
-    int totalSales = dayOrders.stream().mapToInt(Order::getAmount).sum();
-    int netSales = totalSales - expenseTotal;
 
     List<Long> orderSeqs = dayOrders.stream().map(Order::getSeq).toList();
     List<Payment> payments =
         orderSeqs.isEmpty() ? List.of() : paymentRepo.findByOrderSeqIn(orderSeqs);
+
+    // 매출 = 공급가 합 + 부가세 합 (실수령액 기준). 그래야 매출 = 현금 + 카드 + 미수 정합.
+    int vatTotal = payments.stream().mapToInt(Payment::getVat).sum();
+    int totalSales = dayOrders.stream().mapToInt(Order::getAmount).sum() + vatTotal;
+    int netSales = totalSales - expenseTotal;
+
     PayMethodSummary cash = aggregateBy(payments, PayType.CASH);
     PayMethodSummary card = aggregateBy(payments, PayType.CARD);
 
     List<Order> dayUnpaidOrders =
         dayOrders.stream().filter(o -> o.getStatus() != OrderStatus.PAID).toList();
     int unpaidAmount = dayUnpaidOrders.stream().mapToInt(Order::getAmount).sum();
-    PayMethodSummary unpaid = new PayMethodSummary(unpaidAmount, dayUnpaidOrders.size());
+    PayMethodSummary unpaid = new PayMethodSummary(unpaidAmount, 0, dayUnpaidOrders.size());
 
     return new SalesSummaryRes(
         date, totalSales, prevSales, netSales, expenseTotal, cash, card, unpaid);
@@ -187,15 +191,19 @@ public class SalesService {
             .and(payTypeFilter(params.payType()));
 
     List<Order> orders = orderRepo.findAll(spec);
-    int totalSales = orders.stream().mapToInt(Order::getAmount).sum();
     int totalCount = orders.size();
-    int avgDailySales = dayCount > 0 ? totalSales / dayCount : 0;
-    int avgDailyCount = dayCount > 0 ? totalCount / dayCount : 0;
 
     // 결제 분해 — 같은 필터 기간 내 t_payment, 이 주문들에 한정
     List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
     List<Payment> payments =
         orderSeqs.isEmpty() ? List.of() : paymentRepo.findByOrderSeqIn(orderSeqs);
+
+    // 매출 = 공급가 합 + 부가세 합 (실수령액 기준).
+    int vatTotal = payments.stream().mapToInt(Payment::getVat).sum();
+    int totalSales = orders.stream().mapToInt(Order::getAmount).sum() + vatTotal;
+    int avgDailySales = dayCount > 0 ? totalSales / dayCount : 0;
+    int avgDailyCount = dayCount > 0 ? totalCount / dayCount : 0;
+
     PayMethodSummary cash = aggregateBy(payments, PayType.CASH);
     PayMethodSummary card = aggregateBy(payments, PayType.CARD);
 
@@ -250,11 +258,14 @@ public class SalesService {
         Sort.by(Sort.Direction.DESC, "orderAt"));
   }
 
+  /** 결제수단별 — amount=공급가(net), vat=부가세 합. 표시 실수령액(amount+vat)은 프론트에서 합산. */
   private PayMethodSummary aggregateBy(List<Payment> payments, PayType type) {
     int amount =
         payments.stream().filter(p -> p.getPayType() == type).mapToInt(Payment::getAmount).sum();
+    int vat =
+        payments.stream().filter(p -> p.getPayType() == type).mapToInt(Payment::getVat).sum();
     int count = (int) payments.stream().filter(p -> p.getPayType() == type).count();
-    return new PayMethodSummary(amount, count);
+    return new PayMethodSummary(amount, vat, count);
   }
 
   /** orders → transactions (결제 / 매장 / 메뉴 batch fetch + 조립). */

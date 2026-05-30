@@ -83,24 +83,26 @@ public class SalesStatsService {
     OffsetDateTime[] prev = prevDayRange(params.from(), params.to());
 
     List<Order> orders = orderRepo.findAll(rangeSpec(cur));
-    int totalSales = orders.stream().mapToInt(Order::getAmount).sum();
+    Map<Long, Integer> vat = vatByOrder(orders);
+    int totalSales = orders.stream().mapToInt(o -> grossOf(o, vat)).sum();
     int totalCount = orders.size();
+    // 전일 비교 — 공급가 기준(부가세 제외). 증감% 참고용이라 단순 합 유지.
     int prevSales = orderRepo.sumAmountByOrderAtRange(prev[0], prev[1]);
     long prevCount = orderRepo.count(rangeSpec(prev));
 
-    // hourly — 운영시간 setting 기반 bucket
+    // hourly — 운영시간 setting 기반 bucket (실수령액 기준)
     OperatingHours hours = settingService.getOperatingHours();
     Map<Integer, Integer> hourMap =
         orders.stream()
             .collect(
                 Collectors.groupingBy(
-                    o -> o.getOrderAt().getHour(), Collectors.summingInt(Order::getAmount)));
+                    o -> o.getOrderAt().getHour(), Collectors.summingInt(o -> grossOf(o, vat))));
     List<HourBucket> hourlys =
         IntStream.rangeClosed(hours.startHour(), hours.endHour())
             .mapToObj(h -> new HourBucket(h, hourMap.getOrDefault(h, 0)))
             .toList();
 
-    List<StoreSales> storesTop5 = topStores(orders, 5);
+    List<StoreSales> storesTop5 = topStores(orders, vat, 5);
     List<PayMethodPart> payParts = aggregatePayParts(orders);
     List<MenuRank> menusTop5 = topMenusByCount(orders, 5);
 
@@ -128,8 +130,8 @@ public class SalesStatsService {
 
     return new StatsTrendRes(
         params.granularity(),
-        bucketByGranularity(curOrders, params.granularity()),
-        bucketByGranularity(prevOrders, params.granularity()));
+        bucketByGranularity(curOrders, vatByOrder(curOrders), params.granularity()),
+        bucketByGranularity(prevOrders, vatByOrder(prevOrders), params.granularity()));
   }
 
   /* =========================================================
@@ -155,9 +157,10 @@ public class SalesStatsService {
   public StatsStoreRes store(DateRangeParams params) {
     OffsetDateTime[] cur = dayRange(params.from(), params.to());
     List<Order> orders = orderRepo.findAll(rangeSpec(cur));
+    Map<Long, Integer> vat = vatByOrder(orders);
 
-    // 점포별 매출 (전체)
-    List<StoreSales> stores = topStores(orders);
+    // 점포별 매출 (전체) — 실수령액 기준
+    List<StoreSales> stores = topStores(orders, vat);
 
     // 점포별 주문 건수
     Map<Short, Long> countMap =
@@ -218,16 +221,31 @@ public class SalesStatsService {
     return s != null ? s.getNm() : null;
   }
 
-  /** 매장별 매출 — limit 미지정 시 전체. */
-  private List<StoreSales> topStores(List<Order> orders) {
-    return topStores(orders, Integer.MAX_VALUE);
+  /** 주문별 부가세 합 — 실수령액 매출 집계용. 결제 없으면(미수) 0. */
+  private Map<Long, Integer> vatByOrder(List<Order> orders) {
+    List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
+    if (orderSeqs.isEmpty()) return Map.of();
+    return paymentRepo.findByOrderSeqIn(orderSeqs).stream()
+        .collect(
+            Collectors.groupingBy(Payment::getOrderSeq, Collectors.summingInt(Payment::getVat)));
   }
 
-  private List<StoreSales> topStores(List<Order> orders, int limit) {
+  /** 주문 실수령액 = 공급가 + 부가세(카드). */
+  private int grossOf(Order o, Map<Long, Integer> vat) {
+    return o.getAmount() + vat.getOrDefault(o.getSeq(), 0);
+  }
+
+  /** 매장별 매출 — limit 미지정 시 전체. 실수령액(공급가+부가세) 기준. */
+  private List<StoreSales> topStores(List<Order> orders, Map<Long, Integer> vat) {
+    return topStores(orders, vat, Integer.MAX_VALUE);
+  }
+
+  private List<StoreSales> topStores(List<Order> orders, Map<Long, Integer> vat, int limit) {
     Map<Short, Integer> sumMap =
         orders.stream()
             .collect(
-                Collectors.groupingBy(Order::getStoreSeq, Collectors.summingInt(Order::getAmount)));
+                Collectors.groupingBy(
+                    Order::getStoreSeq, Collectors.summingInt(o -> grossOf(o, vat))));
     Map<Short, Store> storeMap = fetchStores(sumMap.keySet());
     return sumMap.entrySet().stream()
         .sorted(Map.Entry.<Short, Integer>comparingByValue().reversed())
@@ -243,12 +261,12 @@ public class SalesStatsService {
     int cash =
         payments.stream()
             .filter(p -> p.getPayType() == PayType.CASH)
-            .mapToInt(Payment::getAmount)
+            .mapToInt(p -> p.getAmount() + p.getVat())
             .sum();
     int card =
         payments.stream()
             .filter(p -> p.getPayType() == PayType.CARD)
-            .mapToInt(Payment::getAmount)
+            .mapToInt(p -> p.getAmount() + p.getVat())
             .sum();
     int unpaid =
         orders.stream()
@@ -387,12 +405,13 @@ public class SalesStatsService {
         .toList();
   }
 
-  private List<TrendPoint> bucketByGranularity(List<Order> orders, StatsGranularity g) {
+  private List<TrendPoint> bucketByGranularity(
+      List<Order> orders, Map<Long, Integer> vat, StatsGranularity g) {
     if (orders.isEmpty()) return List.of();
     Map<LocalDate, Integer> bucketSum = new TreeMap<>(); // 정렬 자동
     for (Order o : orders) {
       LocalDate key = bucketKey(o.getOrderAt().toLocalDate(), g);
-      bucketSum.merge(key, o.getAmount(), Integer::sum);
+      bucketSum.merge(key, grossOf(o, vat), Integer::sum);
     }
     return bucketSum.entrySet().stream()
         .map(e -> new TrendPoint(formatLabel(e.getKey(), g), e.getValue()))
