@@ -37,6 +37,12 @@ public class Payment {
   @Column(name = "amount", nullable = false)
   private Integer amount;
 
+  /** 부가세 — 공급가 {@link #amount} 와 분리 보관. 실수령액 = amount + vat. CARD 만 부과, CASH 는 0. */
+  @NotNull
+  @ColumnDefault("0")
+  @Column(name = "vat", nullable = false)
+  private Integer vat;
+
   @NotNull
   @Enumerated(EnumType.STRING)
   @JdbcTypeCode(SqlTypes.NAMED_ENUM)

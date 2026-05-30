@@ -349,7 +349,7 @@ public class SalesService {
 
   private List<PaymentRes> toPaymentResList(List<Payment> payments) {
     return payments.stream()
-        .map(p -> new PaymentRes(p.getPayType(), p.getAmount(), p.getPayAt()))
+        .map(p -> new PaymentRes(p.getPayType(), p.getAmount(), p.getVat(), p.getPayAt()))
         .toList();
   }
 

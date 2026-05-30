@@ -43,3 +43,5 @@ docs/migration/node_modules
 .env.local
 .env.*.local
 !.env.example
+
+cheonil-restaurant-next.code-workspace

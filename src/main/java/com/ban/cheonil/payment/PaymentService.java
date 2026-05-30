@@ -34,6 +34,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PaymentService {
 
+  /** 카드 결제 부가세율 (공급가의 10%). */
+  private static final float VAT_RATE = 0.1f;
+
   private final PaymentRepo paymentRepo;
   private final OrderRepo orderRepo;
   private final OrderService orderService;
@@ -126,8 +129,16 @@ public class PaymentService {
     Payment p = new Payment();
     p.setOrderSeq(orderSeq);
     p.setAmount(amount);
+    p.setVat(calcVat(amount, payType));
     p.setPayType(payType);
     p.setPayAt(OffsetDateTime.now());
     return paymentRepo.save(p);
+  }
+
+  /** 부가세 — CARD 결제만 공급가의 10% 부과 (반올림), CASH 는 0. */
+  private int calcVat(int amount, com.ban.cheonil.payment.entity.PayType payType) {
+    return payType == com.ban.cheonil.payment.entity.PayType.CARD
+        ? Math.round(amount * VAT_RATE)
+        : 0;
   }
 }
