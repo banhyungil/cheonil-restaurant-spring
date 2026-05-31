@@ -78,10 +78,20 @@ public class PaymentService {
           "분할 결제 합계가 주문금액과 다릅니다. (합계: " + sum + ", 주문: " + order.getAmount() + ")");
     }
 
-    List<Payment> saved =
-        req.splits().stream()
-            .map(s -> saveOnePayment(order.getSeq(), s.amount(), s.payType(), req.payAt()))
-            .toList();
+    // 모든 분할 행의 결제수단이 동일하면 분할이 아니라 단일 결제로 저장 (t_payment 1 row).
+    boolean sameType =
+        req.splits().stream().map(PaymentSplitItem::payType).distinct().count() == 1;
+
+    List<Payment> saved;
+    if (sameType) {
+      var payType = req.splits().get(0).payType();
+      saved = List.of(saveOnePayment(order.getSeq(), order.getAmount(), payType, req.payAt()));
+    } else {
+      saved =
+          req.splits().stream()
+              .map(s -> saveOnePayment(order.getSeq(), s.amount(), s.payType(), req.payAt()))
+              .toList();
+    }
     orderService.changeStatus(order.getSeq(), OrderStatus.PAID);
     return saved.stream().map(PaymentRes::from).toList();
   }
