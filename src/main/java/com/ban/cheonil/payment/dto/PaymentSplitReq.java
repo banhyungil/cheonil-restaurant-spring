@@ -1,5 +1,6 @@
 package com.ban.cheonil.payment.dto;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -9,7 +10,10 @@ import jakarta.validation.constraints.NotNull;
 /**
  * 단일 주문 분할 결제 페이로드.
  *
- * <p>{@code splits} 의 amount 합계 === 주문금액 검증은 서버 책임 (트랜잭션 내).
+ * <p>{@code splits} 의 amount 합계 === 주문금액 검증은 서버 책임 (트랜잭션 내). {@code payAt} = 수금 일시 (null 이면 서버
+ * 현재시각). 분할 행 전체 동일 적용.
  */
 public record PaymentSplitReq(
-    @NotNull Long orderSeq, @NotEmpty @Valid List<PaymentSplitItem> splits) {}
+    @NotNull Long orderSeq,
+    @NotEmpty @Valid List<PaymentSplitItem> splits,
+    OffsetDateTime payAt) {}

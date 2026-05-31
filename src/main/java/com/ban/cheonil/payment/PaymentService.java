@@ -51,7 +51,7 @@ public class PaymentService {
     Order order = getOrder(req.orderSeq());
     ensurePayable(order);
 
-    Payment p = saveOnePayment(order.getSeq(), order.getAmount(), req.payType());
+    Payment p = saveOnePayment(order.getSeq(), order.getAmount(), req.payType(), req.payAt());
     orderService.changeStatus(order.getSeq(), OrderStatus.PAID);
     return PaymentRes.from(p);
   }
@@ -80,7 +80,7 @@ public class PaymentService {
 
     List<Payment> saved =
         req.splits().stream()
-            .map(s -> saveOnePayment(order.getSeq(), s.amount(), s.payType()))
+            .map(s -> saveOnePayment(order.getSeq(), s.amount(), s.payType(), req.payAt()))
             .toList();
     orderService.changeStatus(order.getSeq(), OrderStatus.PAID);
     return saved.stream().map(PaymentRes::from).toList();
@@ -125,13 +125,16 @@ public class PaymentService {
   }
 
   private Payment saveOnePayment(
-      Long orderSeq, Integer amount, com.ban.cheonil.payment.entity.PayType payType) {
+      Long orderSeq,
+      Integer amount,
+      com.ban.cheonil.payment.entity.PayType payType,
+      OffsetDateTime payAt) {
     Payment p = new Payment();
     p.setOrderSeq(orderSeq);
     p.setAmount(amount);
     p.setVat(calcVat(amount, payType));
     p.setPayType(payType);
-    p.setPayAt(OffsetDateTime.now());
+    p.setPayAt(payAt != null ? payAt : OffsetDateTime.now());
     return paymentRepo.save(p);
   }
 
