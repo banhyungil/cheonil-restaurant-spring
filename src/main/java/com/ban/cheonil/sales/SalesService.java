@@ -107,12 +107,15 @@ public class SalesService {
   }
 
   /* =========================================================
-   * Transactions — 그날 거래 내역 (전체 응답, 클라 페이징/필터)
+   * Transactions — 거래 내역 조회 (전체 응답, 클라 페이징/필터)
    * ========================================================= */
 
   public List<TransactionRes> transactions(TransactionsParams params) {
-    OffsetDateTime[] dayRange = dayRangeOf(params.date());
-    Specification<Order> spec = baseDateRange(dayRange).and(storeFilter(params.storeSeq()));
+    OffsetDateTime fromDt = params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime toDt =
+        params.to().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    Specification<Order> spec =
+        baseDateRange(new OffsetDateTime[] {fromDt, toDt}).and(storeFilter(params.storeSeq()));
     List<Order> orders = orderRepo.findAll(spec, Sort.by(Sort.Direction.DESC, "orderAt"));
     return assembleTransactionList(orders);
   }
@@ -137,8 +140,7 @@ public class SalesService {
 
   /** 그리드 탭 거래 내역 — 클라 페이징 (전체 응답). UI 가드: 90일 초과 호출 금지. */
   public List<OrderRowRes> findOrders(OrdersParams params) {
-    OffsetDateTime fromDt =
-        params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime fromDt = params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     OffsetDateTime toDt =
         params.to().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
 
@@ -152,8 +154,7 @@ public class SalesService {
     if (orders.isEmpty()) return List.of();
 
     List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
-    Set<Short> storeSeqs =
-        orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
+    Set<Short> storeSeqs = orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
 
     Map<Long, List<Payment>> paymentsByOrder =
         paymentRepo.findByOrderSeqIn(orderSeqs).stream()
@@ -178,8 +179,7 @@ public class SalesService {
 
   /** 그리드 탭 KPI 4 카드. */
   public OrdersSummaryRes ordersSummary(OrdersParams params) {
-    OffsetDateTime fromDt =
-        params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime fromDt = params.from().atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     OffsetDateTime toDt =
         params.to().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     int dayCount = (int) (params.to().toEpochDay() - params.from().toEpochDay() + 1);
@@ -246,24 +246,20 @@ public class SalesService {
 
   private OffsetDateTime[] dayRangeOf(LocalDate date) {
     OffsetDateTime start = date.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
-    OffsetDateTime end =
-        date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
+    OffsetDateTime end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     return new OffsetDateTime[] {start, end};
   }
 
   private Pageable pageableOf(Integer page, Integer size) {
     return PageRequest.of(
-        page != null ? page : 0,
-        size != null ? size : 20,
-        Sort.by(Sort.Direction.DESC, "orderAt"));
+        page != null ? page : 0, size != null ? size : 20, Sort.by(Sort.Direction.DESC, "orderAt"));
   }
 
   /** 결제수단별 — amount=공급가(net), vat=부가세 합. 표시 실수령액(amount+vat)은 프론트에서 합산. */
   private PayMethodSummary aggregateBy(List<Payment> payments, PayType type) {
     int amount =
         payments.stream().filter(p -> p.getPayType() == type).mapToInt(Payment::getAmount).sum();
-    int vat =
-        payments.stream().filter(p -> p.getPayType() == type).mapToInt(Payment::getVat).sum();
+    int vat = payments.stream().filter(p -> p.getPayType() == type).mapToInt(Payment::getVat).sum();
     int count = (int) payments.stream().filter(p -> p.getPayType() == type).count();
     return new PayMethodSummary(amount, vat, count);
   }
@@ -273,8 +269,7 @@ public class SalesService {
     if (orders.isEmpty()) return List.of();
 
     List<Long> orderSeqs = orders.stream().map(Order::getSeq).toList();
-    Set<Short> storeSeqs =
-        orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
+    Set<Short> storeSeqs = orders.stream().map(Order::getStoreSeq).collect(Collectors.toSet());
 
     Map<Long, List<Payment>> paymentsByOrder =
         paymentRepo.findByOrderSeqIn(orderSeqs).stream()
@@ -353,9 +348,7 @@ public class SalesService {
   }
 
   private String menuSummaryOf(List<OrderMenuExtRes> menus) {
-    return menus.stream()
-        .map(m -> m.menuNm() + " " + m.cnt())
-        .collect(Collectors.joining(", "));
+    return menus.stream().map(m -> m.menuNm() + " " + m.cnt()).collect(Collectors.joining(", "));
   }
 
   private List<PaymentRes> toPaymentResList(List<Payment> payments) {
