@@ -1,6 +1,11 @@
 server:
   port: 8080
 spring:
+  # 로컬 실행(bootRun / IDE) 에서도 .env 의 값을 읽도록 import.
+  # docker-compose 는 실제 환경변수로 주입하는데, OS 환경변수가 config import 보다
+  # 우선순위가 높으므로 운영 동작에는 영향 없음. 파일 없으면 optional 이라 무시.
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: cheonil-restaurant-spring
   datasource:

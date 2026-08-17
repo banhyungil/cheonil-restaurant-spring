@@ -19,8 +19,8 @@ import lombok.RequiredArgsConstructor;
  *
  * <p>흐름: key 계산 → 캐시 hit ? 즉시 반환 : Google API 호출 → 캐시 저장 → 반환.
  *
- * <p>API key 는 헤더({@code X-Goog-Api-Key}) 로 전달 — query string 보다 로그/프록시 노출 ↓.
- * 응답은 {@code {audioContent: <base64 mp3>}} 라 base64 디코딩 필요.
+ * <p>API key 는 헤더({@code X-Goog-Api-Key}) 로 전달 — query string 보다 로그/프록시 노출 ↓. 응답은 {@code
+ * {audioContent: <base64 mp3>}} 라 base64 디코딩 필요.
  *
  * <p>{@link com.ban.cheonil.speech.SpeechService} 의 RestTemplate 패턴을 따른다.
  */
@@ -28,7 +28,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class TtsService {
 
-  private static final String GOOGLE_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize";
+  private static final String GOOGLE_TTS_URL =
+      "https://texttospeech.googleapis.com/v1/text:synthesize";
 
   private static final Logger log = LoggerFactory.getLogger(TtsService.class);
 
@@ -61,6 +62,11 @@ public class TtsService {
       return new Result(cached, true);
     }
 
+    // 키 미주입 시 Google 은 403 "unregistered callers" 로 응답 — 원인 파악이 어려우므로 먼저 걸러낸다.
+    if (apiKey == null || apiKey.isBlank()) {
+      throw new IllegalStateException("GOOGLE_API_KEY 미설정 — .env 또는 환경변수를 확인하세요.");
+    }
+
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.set("X-Goog-Api-Key", apiKey);
@@ -87,10 +93,7 @@ public class TtsService {
 
     cache.put(key, bytes);
     log.debug(
-        "tts cache miss key={} len={} bytes={}",
-        key.substring(0, 8),
-        text.length(),
-        bytes.length);
+        "tts cache miss key={} len={} bytes={}", key.substring(0, 8), text.length(), bytes.length);
     return new Result(bytes, false);
   }
 }

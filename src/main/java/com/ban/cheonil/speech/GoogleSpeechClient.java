@@ -47,6 +47,11 @@ public class GoogleSpeechClient {
   public String transcribe(byte[] audio, String contentType, List<String> phrases) {
     String encoding = mapEncoding(contentType);
 
+    // 키 미주입 시 Google 은 403 "unregistered callers" 로 응답 — 원인 파악이 어려우므로 먼저 걸러낸다.
+    if (apiKey == null || apiKey.isBlank()) {
+      throw new IllegalStateException("GOOGLE_API_KEY 미설정 — .env 또는 환경변수를 확인하세요.");
+    }
+
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.set("X-Goog-Api-Key", apiKey);
