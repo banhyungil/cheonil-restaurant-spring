@@ -1,5 +1,6 @@
 package com.ban.cheonil.tts;
 
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.Map;
 
@@ -59,6 +60,9 @@ public class TtsService {
     byte[] cached = cache.get(key);
     if (cached != null) {
       log.debug("tts cache hit key={} len={}", key.substring(0, 8), text.length());
+      // 메타데이터 도입 이전에 쌓인 캐시는 sidecar 가 없어 관리 화면 목록에 안 뜬다.
+      // hit 시점엔 파라미터를 다 알고 있으므로 이때 채워 넣는다 — 한 번만 재사용돼도 목록에 나타남.
+      cache.backfillMetaIfMissing(key, text, speed, gainDb, effectiveVoice);
       return new Result(cached, true);
     }
 
@@ -91,7 +95,10 @@ public class TtsService {
     }
     byte[] bytes = Base64.getDecoder().decode((String) res.get("audioContent"));
 
-    cache.put(key, bytes);
+    cache.put(
+        key,
+        bytes,
+        new TtsCacheService.CacheMeta(text, speed, gainDb, effectiveVoice, OffsetDateTime.now()));
     log.debug(
         "tts cache miss key={} len={} bytes={}", key.substring(0, 8), text.length(), bytes.length);
     return new Result(bytes, false);
