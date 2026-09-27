@@ -19,7 +19,8 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: root
-      POSTGRES_PASSWORD: root1!
+      # .env 의 DB_PASSWORD. 주의: 최초 volume 생성 시에만 적용 — 기존 DB 는 ALTER USER 로 변경.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요}
       POSTGRES_DB: cheonil
     healthcheck:
       # app 컨테이너가 PG ready 까지 대기 — depends_on.condition: service_healthy 와 결합
@@ -31,10 +32,12 @@ services:
       - cheonil
 
   app:
+    # 운영: Docker Hub 이미지 pull (scripts/build-push.sh 로 push). APP_TAG 로 롤백 (기본 latest).
+    image: banhyungil/cheonil-restaurant-spring:${APP_TAG:-latest}
+    # 개발: `docker compose build` 로 로컬 빌드 시 사용.
     build:
       context: .
       dockerfile: Dockerfile
-    # image: banhyungil/cheonil-restaurant-spring
     container_name: cheonil-server
     restart: always
     ports:
@@ -45,7 +48,7 @@ services:
       TZ: Asia/Seoul # 추가
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cheonil
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root1!
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요}
       WHISPER_URL: http://whisper:9000
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       # 음성 주문 로그 audio 저장 경로 — named volume v-voice-orders 마운트 위치.
@@ -98,10 +101,11 @@ services:
 
   web:
     container_name: cheonil-web
+    # WEB_TAG 로 롤백 (기본 latest) — sha 는 frontend 저장소 기준.
+    image: banhyungil/cheonil-restaurant-next:${WEB_TAG:-latest}
     build:
       context: ../cheonil-restaurant-next
       dockerfile: Dockerfile
-    # image: banhyungil/cheonil-restaurant-next
     restart: always
     ports:
       - 80:80

@@ -2,21 +2,29 @@
 
 매장 운영 PC (Windows) 에 천일 시스템을 처음 올리고 운영하는 절차.
 
+```
+[개발 PC]  scripts/build-push.sh  ──▶  Docker Hub  ──▶  [매장 PC]  scripts/deploy.bat (pull + 재기동)
+```
+
 ---
 
 ## 1. 사전 조건
 
 | 항목 | 비고 |
 |-----|-----|
-| Docker Desktop | Windows / Mac 둘 다 동일 |
-| git | 저장소 동기화용 |
+| Docker Desktop | Windows / Mac 둘 다 동일 (Windows 는 WSL2 백엔드) |
+| git | backend 저장소 동기화용 (compose / scripts) |
+| Docker Hub 로그인 | `docker login` — private 이미지 pull 용 (한 번만) |
 | 인터넷 연결 | Cloudflare Tunnel + claude CLI 가 외부 통신 필요 |
-| 디렉터리 구조 | `cheonil-restaurant-spring` 과 `cheonil-restaurant-next` 가 sibling 폴더 |
+
+매장 PC 는 backend 저장소만 clone. 이미지는 Docker Hub 에서 pull 하므로 frontend 저장소 / 빌드 불필요.
+
+개발 PC (이미지 빌드) 는 두 저장소가 sibling 폴더여야 함:
 
 ```
 <ROOT>/
 ├── cheonil-restaurant-spring/   ← 본 디렉터리 (백엔드 + docker-compose)
-└── cheonil-restaurant-next/     ← 프론트엔드 (web 컨테이너에서 빌드)
+└── cheonil-restaurant-next/     ← 프론트엔드
 ```
 
 ---
@@ -27,8 +35,8 @@
 
 ```bash
 git clone <backend-repo> cheonil-restaurant-spring
-git clone <frontend-repo> cheonil-restaurant-next
 cd cheonil-restaurant-spring
+docker login   # Docker Hub (banhyungil)
 ```
 
 ### 2-2. `.env` 작성
@@ -40,6 +48,9 @@ cp .env.example .env
 `.env` 편집:
 
 ```bash
+# PostgreSQL 비밀번호 — 최초 DB volume 생성 시 적용. 이후 변경은 ALTER USER 필요.
+DB_PASSWORD=...
+
 # Cloudflare Zero Trust > Networks > Connectors 에서 발급한 터널 토큰
 CLOUDFLARED_TOKEN=eyJhIjoi...
 
@@ -52,10 +63,11 @@ GOOGLE_TTS_API_KEY=AIza...
 ### 2-3. 첫 docker compose 기동
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
 
-- 첫 빌드는 시간 걸림 (jar 빌드 + claude installer + Whisper 이미지 + MeloTTS 모델 다운로드 등)
+- 첫 실행은 시간 걸림 (이미지 다운로드 + Whisper 모델 다운로드 등)
 - 백그라운드 (`-d`) 로 떠있는지 확인:
   ```bash
   docker compose ps
@@ -97,27 +109,51 @@ docker compose exec app sh -c 'echo "안녕 한국어로" | claude -p'
 
 ### 코드 업데이트 + 재배포 (한 번에)
 
+**1) 개발 PC — 이미지 빌드 + push**
+
+```bash
+./scripts/build-push.sh        # app + web
+./scripts/build-push.sh app    # backend 만
+./scripts/build-push.sh web    # frontend 만
+```
+
+- `linux/amd64` 로 빌드 (Mac arm64 에서도 매장 PC 용 이미지 생성)
+- 태그: `latest` + git short sha (미커밋 변경 시 `-dirty`)
+
+**2) 매장 PC — pull + 재기동**
+
 ```bash
 # Windows
 scripts\deploy.bat
 
-# macOS / Linux (예정 — 필요 시 .sh 추가)
+# macOS / Linux
+./scripts/deploy.sh
 ```
 
-`deploy.bat` 가 처리:
-1. Frontend git pull
-2. Backend git pull
-3. `docker compose build`
-4. `docker compose up -d`
+`deploy` 가 처리:
+1. Backend git pull (compose / scripts 최신화)
+2. `docker compose pull app web`
+3. `docker compose up -d --no-build`
 
 `.env` 와 claude 로그인은 그대로 유지 (volume 영속).
+
+### 롤백
+
+`.env` 에 이전 이미지의 git sha 지정 후 `deploy` 재실행. 복귀 시 해당 줄 삭제.
+
+```bash
+APP_TAG=4375ddf   # backend 저장소 sha
+WEB_TAG=a1b2c3d   # frontend 저장소 sha (필요한 쪽만 지정)
+```
+
+태그 목록은 Docker Hub 저장소의 Tags 탭에서 확인.
 
 ### 부분 재시작
 
 ```bash
 docker compose restart app           # Spring 만
 docker compose restart cloudflared   # 터널만 (DNS resolve 문제 시)
-docker compose up -d --build app     # Spring 이미지 재빌드
+docker compose up -d --build app     # Spring 이미지 로컬 재빌드 (개발 PC)
 ```
 
 ### 로그 확인
@@ -218,7 +254,8 @@ scripts\db-restore-append.bat  cheonil_YYYYMMDD_HHMMSS_data.sql
 
 ## 요약 — 수동 단계는 이것뿐
 
-1. `.env` 작성 (`CLOUDFLARED_TOKEN`, `GOOGLE_TTS_API_KEY`)
-2. `docker compose exec app claude /login`
+1. `.env` 작성 (`DB_PASSWORD`, `CLOUDFLARED_TOKEN`, `GOOGLE_API_KEY`)
+2. `docker login` (Docker Hub)
+3. `docker compose exec app claude /login`
 
-나머지는 모두 `deploy.bat` / `docker compose` 명령으로 자동화.
+나머지는 모두 `build-push.sh` (개발 PC) / `deploy` (매장 PC) 로 자동화.

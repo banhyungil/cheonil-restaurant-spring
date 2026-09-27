@@ -11,7 +11,8 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/cheonil
     username: root
-    password: root1!
+    # .env 의 DB_PASSWORD — 이미지에 비밀번호가 baked 되지 않도록 기본값 X.
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
