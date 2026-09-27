@@ -4,7 +4,6 @@ import java.util.List;
 
 import jakarta.validation.Valid;
 
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,9 +46,9 @@ public class SalesController {
     return salesService.transactions(params);
   }
 
-  /** 수금 탭 — 모든 미수 (날짜 무관, lazy pagination). */
+  /** 수금 탭 — 모든 미수 (날짜 무관, 전체 응답 · 클라 페이징). */
   @GetMapping("/unpaid")
-  public Page<TransactionRes> unpaid(@ModelAttribute UnpaidParams params) {
+  public List<TransactionRes> unpaid(@ModelAttribute UnpaidParams params) {
     return salesService.unpaid(params);
   }
 

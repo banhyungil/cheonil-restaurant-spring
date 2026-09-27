@@ -13,10 +13,6 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -49,7 +45,7 @@ import com.ban.cheonil.store.entity.Store;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 정산 서비스 — 단일 날짜 KPI + 거래 내역 페이징 + 전체 미수 페이징.
+ * 정산 서비스 — 단일 날짜 KPI + 거래 내역 + 전체 미수 (전체 응답, 클라 페이징).
  *
  * <p>설계 원칙:
  *
@@ -121,17 +117,15 @@ public class SalesService {
   }
 
   /* =========================================================
-   * Unpaid — 수금 탭 (날짜 무관 전체 미수)
+   * Unpaid — 수금 탭 (날짜 무관 전체 미수, 전체 응답 · 클라 페이징)
    * ========================================================= */
 
-  public Page<TransactionRes> unpaid(UnpaidParams params) {
-    Pageable pageable = pageableOf(params.page(), params.size());
+  public List<TransactionRes> unpaid(UnpaidParams params) {
     Specification<Order> spec =
         Specification.<Order>where((r, q, cb) -> cb.notEqual(r.get("status"), OrderStatus.PAID))
             .and(storeFilter(params.storeSeq()));
-    Page<Order> orderPage = orderRepo.findAll(spec, pageable);
-    List<TransactionRes> content = assembleTransactionList(orderPage.getContent());
-    return new PageImpl<>(content, pageable, orderPage.getTotalElements());
+    List<Order> orders = orderRepo.findAll(spec, Sort.by(Sort.Direction.DESC, "orderAt"));
+    return assembleTransactionList(orders);
   }
 
   /* =========================================================
@@ -248,11 +242,6 @@ public class SalesService {
     OffsetDateTime start = date.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     OffsetDateTime end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
     return new OffsetDateTime[] {start, end};
-  }
-
-  private Pageable pageableOf(Integer page, Integer size) {
-    return PageRequest.of(
-        page != null ? page : 0, size != null ? size : 20, Sort.by(Sort.Direction.DESC, "orderAt"));
   }
 
   /** 결제수단별 — amount=공급가(net), vat=부가세 합. 표시 실수령액(amount+vat)은 프론트에서 합산. */
