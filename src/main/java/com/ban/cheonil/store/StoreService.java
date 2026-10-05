@@ -74,6 +74,20 @@ public class StoreService {
     s.setModAt(OffsetDateTime.now());
   }
 
+  /**
+   * 구매처로 표시 — 지출 저장 시 구입처로 쓴 매장. 이미 구매처면 변경 없음.
+   *
+   * @throws EntityNotFoundException 매장이 없으면
+   */
+  @Transactional
+  @CacheEvict(value = "stores", allEntries = true)
+  public void markPurchase(Short seq) {
+    Store s = get(seq);
+    if (Boolean.TRUE.equals(s.getIsPurchase())) return;
+    s.setIsPurchase(true);
+    s.setModAt(OffsetDateTime.now());
+  }
+
   /* ==================== helpers ==================== */
 
   private Store get(Short seq) {
@@ -88,5 +102,13 @@ public class StoreService {
     s.setAddr(req.addr());
     s.setCmt(req.cmt());
     s.setActive(req.active() != null ? req.active() : Boolean.TRUE);
+
+    boolean isSale = req.isSale() != null ? req.isSale() : true;
+    boolean isPurchase = req.isPurchase() != null ? req.isPurchase() : false;
+    if (!isSale && !isPurchase) {
+      throw new IllegalArgumentException("판매처 / 구매처 중 하나 이상 선택해야 합니다.");
+    }
+    s.setIsSale(isSale);
+    s.setIsPurchase(isPurchase);
   }
 }

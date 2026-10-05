@@ -52,6 +52,18 @@ public class Store {
   @Column(name = "active", nullable = false)
   private Boolean active;
 
+  /** 판매처 여부 — 주문 / 예약 매장 선택 대상. */
+  @NotNull
+  @ColumnDefault("true")
+  @Column(name = "is_sale", nullable = false)
+  private Boolean isSale;
+
+  /** 구매처 여부 — 지출 구입처 선택 대상. */
+  @NotNull
+  @ColumnDefault("false")
+  @Column(name = "is_purchase", nullable = false)
+  private Boolean isPurchase;
+
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "options")
   private Map<String, Object> options;

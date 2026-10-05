@@ -14,6 +14,8 @@ public record StoreRes(
     Double latitude,
     Double longitude,
     Boolean active,
+    Boolean isSale,
+    Boolean isPurchase,
     Map<String, Object> options,
     OffsetDateTime regAt,
     OffsetDateTime modAt) {
@@ -27,6 +29,8 @@ public record StoreRes(
         s.getLatitude(),
         s.getLongitude(),
         s.getActive(),
+        s.getIsSale(),
+        s.getIsPurchase(),
         s.getOptions(),
         s.getRegAt(),
         s.getModAt());

@@ -386,9 +386,14 @@ public class VoiceOrderService {
     return false;
   }
 
+  /** 음성 주문 매칭 대상 매장 — 활성 판매처만 (구매 전용 매장 제외). */
+  private List<StoreRes> saleStores() {
+    return storeService.findAll(false).stream().filter(StoreRes::isSale).toList();
+  }
+
   /** 매장/메뉴 컨텍스트의 fingerprint — 변경 감지용. 캐시 hit 라 비용 미미. */
   private String computeContextHash() {
-    List<StoreRes> stores = storeService.findAll(false);
+    List<StoreRes> stores = saleStores();
     List<MenuRes> menus = menuService.findAll(false);
     StringBuilder sb = new StringBuilder();
     for (StoreRes s : stores) sb.append(s.seq()).append("|").append(s.nm()).append("\n");
@@ -446,7 +451,7 @@ public class VoiceOrderService {
 
   /** 첫 session — 컨텍스트 + schema + 발화 모두 포함. */
   private String buildFullPrompt(String userText) {
-    List<StoreRes> stores = storeService.findAll(false);
+    List<StoreRes> stores = saleStores();
     List<MenuRes> menus = menuService.findAll(false);
 
     // 파이프 구분 포맷 — 토큰 효율 ↑. 매장/메뉴 nm 에 `|` 가 포함될 가능성 무시 (이름에 거의 안 씀).

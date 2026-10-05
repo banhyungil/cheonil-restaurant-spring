@@ -31,7 +31,7 @@ import com.ban.cheonil.product.ProductRepo;
 import com.ban.cheonil.product.UnitRepo;
 import com.ban.cheonil.product.entity.Product;
 import com.ban.cheonil.product.entity.Unit;
-import com.ban.cheonil.store.StoreRepo;
+import com.ban.cheonil.store.StoreService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -54,7 +54,7 @@ public class ExpenseService {
   private final ExpenseRepo expenseRepo;
   private final ExpenseProductRepo expenseProductRepo;
   private final ExpenseCategoryRepo expenseCategoryRepo;
-  private final StoreRepo storeRepo;
+  private final StoreService storeService;
   private final ProductRepo productRepo;
   private final UnitRepo unitRepo;
 
@@ -131,9 +131,8 @@ public class ExpenseService {
       throw new EntityNotFoundException("expense category " + req.ctgSeq() + " not found");
     }
     if (req.storeSeq() != null) {
-      if (!storeRepo.existsById(req.storeSeq())) {
-        throw new EntityNotFoundException("store " + req.storeSeq() + " not found");
-      }
+      // 구입처로 쓴 매장은 구매처로 표시 (매장 없으면 EntityNotFoundException). 아래 검증 실패 시 함께 롤백.
+      storeService.markPurchase(req.storeSeq());
       // 같은 일자 + 같은 매장 지출이 이미 있으면 차단 — DB 유니크 인덱스보다 먼저 알기 쉬운 메시지로
       expenseRepo
           .findByStoreAndDay(req.storeSeq(), req.expenseDt())

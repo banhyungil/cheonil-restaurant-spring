@@ -33,13 +33,14 @@ import com.ban.cheonil.product.UnitRepo;
 import com.ban.cheonil.product.entity.Product;
 import com.ban.cheonil.product.entity.Unit;
 import com.ban.cheonil.store.StoreRepo;
+import com.ban.cheonil.store.StoreService;
 import com.ban.cheonil.store.entity.Store;
 
 /** {@link ExpenseService} — 기간/카테고리(하위 포함) 조회, 같은 일자·매장 차단, lookup, 지출명 추천, 품목, 삭제. */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Testcontainers
-@Import({ExpenseService.class, ExpenseCategoryService.class})
+@Import({ExpenseService.class, ExpenseCategoryService.class, StoreService.class})
 class ExpenseServiceTest {
 
   @Container
@@ -114,6 +115,18 @@ class ExpenseServiceTest {
     create(utility, null, "전기요금", 80_000, D1);
     create(utility, null, "수도요금", 20_000, D1);
     assertThat(find(D1, D1, null, null, null)).hasSize(3);
+  }
+
+  @Test
+  @DisplayName("구입처로 쓴 판매 전용 매장 → 구매처로 표시 (판매처 유지)")
+  void markStoreAsPurchase() {
+    Short shop = saveStore("세림", true, false);
+
+    create(veg, shop, "대파", 10_000, D1);
+
+    Store s = storeRepo.findById(shop).orElseThrow();
+    assertThat(s.getIsPurchase()).isTrue();
+    assertThat(s.getIsSale()).isTrue();
   }
 
   @Test
@@ -243,10 +256,16 @@ class ExpenseServiceTest {
   }
 
   private Short saveStore(String nm) {
+    return saveStore(nm, false, true);
+  }
+
+  private Short saveStore(String nm, boolean isSale, boolean isPurchase) {
     var s = new Store();
     s.setCtgSeq((short) 1);
     s.setNm(nm);
     s.setActive(true);
+    s.setIsSale(isSale);
+    s.setIsPurchase(isPurchase);
     return storeRepo.saveAndFlush(s).getSeq();
   }
 }
