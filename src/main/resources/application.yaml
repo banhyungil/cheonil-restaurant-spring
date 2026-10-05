@@ -25,7 +25,9 @@ spring:
     show-sql: true
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    # db/seed — 마스터 데이터 seed (버전 번호는 db/migration 과 공유: V7 seed 다음 스키마 변경은 V8).
+    # 테스트는 src/test/resources/application.properties 에서 db/migration 만 사용.
+    locations: classpath:db/migration,classpath:db/seed
     # 기존 운영 DB (스키마 이미 있음, 데이터 있음) 안전 도입:
     #  - 첫 실행 시 flyway_schema_history 가 없으면 baseline-version 으로 마킹만 하고 V1 은 skip
     #  - 그 다음부터 V2, V3 ... 만 적용
