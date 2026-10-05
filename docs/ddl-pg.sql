@@ -135,9 +135,9 @@ create table public.m_unit
 
 comment on table public.m_unit is '단위 (kg, 박스, 개 등)';
 
-comment on column public.m_unit.base_unit_seq is '기준 단위 (g → kg). NULL 이면 환산 불가';
+comment on column public.m_unit.base_unit_seq is '기준 단위 (g → kg). NULL 이면 자기 자신이 기준 단위';
 
-comment on column public.m_unit.base_factor is '기준 단위 환산계수 (g → 0.001)';
+comment on column public.m_unit.base_factor is '기준 단위 환산계수 (g → 0.001). base_unit_seq 가 있을 때만 값 존재';
 
 alter table public.m_unit
     owner to root;

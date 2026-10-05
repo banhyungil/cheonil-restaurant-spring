@@ -54,20 +54,15 @@ alter table m_product_info
 
 -- ---------------------------------------------------------------------
 -- m_unit — 기준 단위 환산 (식자재별 가격 비교용)
---   기준단가 = price / (unit_cnt * base_factor)
---   개, 단, 판, 박스 등 환산 불가 단위는 NULL → 같은 단위끼리만 비교
+--   base_unit_seq NULL = 자기 자신이 기준 단위 (kg, L, 개, 단 ...)
+--   비교 그룹 = coalesce(base_unit_seq, seq), 기준단가 = price / (unit_cnt * coalesce(base_factor, 1))
 -- ---------------------------------------------------------------------
 alter table m_unit
     add column base_unit_seq smallint,
     add column base_factor   numeric(10, 4);
 
-comment on column m_unit.base_unit_seq is '기준 단위 (g → kg). NULL 이면 환산 불가';
-comment on column m_unit.base_factor is '기준 단위 환산계수 (g → 0.001)';
-
-update m_unit
-set base_unit_seq = seq,
-    base_factor   = 1
-where nm in ('kg', 'L');
+comment on column m_unit.base_unit_seq is '기준 단위 (g → kg). NULL 이면 자기 자신이 기준 단위';
+comment on column m_unit.base_factor is '기준 단위 환산계수 (g → 0.001). base_unit_seq 가 있을 때만 값 존재';
 
 update m_unit
 set base_unit_seq = (select seq from m_unit where nm = 'kg'),

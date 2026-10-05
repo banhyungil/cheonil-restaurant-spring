@@ -31,11 +31,11 @@ public class Unit {
   @Column(name = "is_unit_cnt", nullable = false)
   private Boolean isUnitCnt;
 
-  /** 기준 단위 (g → kg). NULL 이면 환산 불가. */
+  /** 기준 단위 (g → kg). NULL 이면 자기 자신이 기준 단위. */
   @Column(name = "base_unit_seq")
   private Short baseUnitSeq;
 
-  /** 기준 단위 환산계수 (g → 0.001). 기준단가 = price / (unit_cnt * base_factor). */
+  /** 기준 단위 환산계수 (g → 0.001). base_unit_seq 가 있을 때만 값 존재. */
   @Column(name = "base_factor", precision = 10, scale = 4)
   private BigDecimal baseFactor;
 }
