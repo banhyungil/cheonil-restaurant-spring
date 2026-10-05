@@ -18,7 +18,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ban.cheonil.entities.ExpenseRepo;
+import com.ban.cheonil.expense.ExpenseRepo;
 import com.ban.cheonil.order.OrderMenuRepo;
 import com.ban.cheonil.order.OrderRepo;
 import com.ban.cheonil.order.dto.OrderMenuExtRes;

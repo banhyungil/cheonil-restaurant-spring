@@ -1,4 +1,6 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.product.entity;
+
+import java.math.BigDecimal;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -28,4 +30,12 @@ public class Unit {
   @ColumnDefault("false")
   @Column(name = "is_unit_cnt", nullable = false)
   private Boolean isUnitCnt;
+
+  /** 기준 단위 (g → kg). NULL 이면 환산 불가. */
+  @Column(name = "base_unit_seq")
+  private Short baseUnitSeq;
+
+  /** 기준 단위 환산계수 (g → 0.001). 기준단가 = price / (unit_cnt * base_factor). */
+  @Column(name = "base_factor", precision = 10, scale = 4)
+  private BigDecimal baseFactor;
 }

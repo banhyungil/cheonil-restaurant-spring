@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.expense.entity;
 
 import java.util.Map;
 
@@ -25,7 +25,7 @@ public class ExpenseCategory {
   @NotNull
   @JdbcTypeCode(SqlTypes.OTHER)
   @Column(name = "path", nullable = false, columnDefinition = "ltree")
-  private Object path;
+  private String path;
 
   @Size(max = 50)
   @NotNull

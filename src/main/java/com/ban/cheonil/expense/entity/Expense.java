@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.expense.entity;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -17,27 +17,35 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "m_product_info")
-public class ProductInfo {
+@Table(name = "t_expense")
+public class Expense {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(nullable = false)
-  private Short seq;
+  private Long seq;
 
   @NotNull
-  @Column(name = "ingd_seq", nullable = false)
-  private Short ingdSeq;
+  @Column(name = "ctg_seq", nullable = false)
+  private Integer ctgSeq;
 
-  @Column(name = "brand_seq")
-  private Short brandSeq;
+  @Column(name = "store_seq")
+  private Short storeSeq;
 
-  @Size(max = 100)
+  @Size(max = 50)
   @NotNull
-  @Column(name = "nm", nullable = false, length = 100)
+  @Column(name = "nm", nullable = false, length = 50)
   private String nm;
 
-  @Size(max = 200)
-  @Column(name = "cmt", length = 200)
+  @NotNull
+  @Column(name = "amount", nullable = false)
+  private Integer amount;
+
+  @NotNull
+  @Column(name = "expense_at", nullable = false)
+  private OffsetDateTime expenseAt;
+
+  @Size(max = 400)
+  @Column(name = "cmt", length = 400)
   private String cmt;
 
   @JdbcTypeCode(SqlTypes.JSON)

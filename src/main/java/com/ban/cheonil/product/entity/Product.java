@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.product.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;

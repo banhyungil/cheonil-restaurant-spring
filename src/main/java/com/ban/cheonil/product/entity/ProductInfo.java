@@ -1,4 +1,4 @@
-package com.ban.cheonil.entities;
+package com.ban.cheonil.product.entity;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -17,20 +17,28 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "m_ingredient")
-public class Ingredient {
+@Table(name = "m_product_info")
+public class ProductInfo {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(nullable = false)
   private Short seq;
 
-  @Column(name = "ctg_seq")
-  private Short ctgSeq;
+  @NotNull
+  @Column(name = "ingd_seq", nullable = false)
+  private Short ingdSeq;
+
+  @Column(name = "brand_seq")
+  private Short brandSeq;
 
   @Size(max = 100)
   @NotNull
   @Column(name = "nm", nullable = false, length = 100)
   private String nm;
+
+  @Size(max = 200)
+  @Column(name = "cmt", length = 200)
+  private String cmt;
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "options")
