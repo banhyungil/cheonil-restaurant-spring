@@ -11,6 +11,8 @@ import com.ban.cheonil.expense.entity.Expense;
 /** 지출 Repository. */
 public interface ExpenseRepo extends JpaRepository<Expense, Long> {
 
+  long countByCtgSeq(Integer ctgSeq);
+
   /** 기간 내 지출 합계. row 0건이면 0 반환. */
   @Query(
       "select coalesce(sum(e.amount), 0) from Expense e "
