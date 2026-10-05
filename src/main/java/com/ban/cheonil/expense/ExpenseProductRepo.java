@@ -8,4 +8,6 @@ import com.ban.cheonil.expense.entity.ExpenseProduct;
 public interface ExpenseProductRepo extends JpaRepository<ExpenseProduct, Long> {
 
   long countByPrdSeq(Integer prdSeq);
+
+  void deleteByExpsSeq(Long expsSeq);
 }
