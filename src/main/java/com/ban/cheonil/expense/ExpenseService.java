@@ -1,8 +1,12 @@
 package com.ban.cheonil.expense;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -15,11 +19,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ban.cheonil.common.config.TimeZoneConfig;
+import com.ban.cheonil.expense.dto.ExpenseProductReq;
+import com.ban.cheonil.expense.dto.ExpenseProductRes;
 import com.ban.cheonil.expense.dto.ExpenseRes;
 import com.ban.cheonil.expense.dto.ExpenseSaveReq;
 import com.ban.cheonil.expense.dto.ExpensesParams;
 import com.ban.cheonil.expense.entity.Expense;
 import com.ban.cheonil.expense.entity.ExpenseCategory;
+import com.ban.cheonil.expense.entity.ExpenseProduct;
+import com.ban.cheonil.product.ProductRepo;
+import com.ban.cheonil.product.UnitRepo;
+import com.ban.cheonil.product.entity.Product;
+import com.ban.cheonil.product.entity.Unit;
 import com.ban.cheonil.store.StoreRepo;
 
 import lombok.RequiredArgsConstructor;
@@ -44,6 +55,8 @@ public class ExpenseService {
   private final ExpenseProductRepo expenseProductRepo;
   private final ExpenseCategoryRepo expenseCategoryRepo;
   private final StoreRepo storeRepo;
+  private final ProductRepo productRepo;
+  private final UnitRepo unitRepo;
 
   /** 기간 + 필터 — 최신 일자순. 카테고리는 하위 카테고리 지출까지 포함. */
   public List<ExpenseRes> findAll(ExpensesParams params) {
@@ -57,16 +70,16 @@ public class ExpenseService {
             .and(storeFilter(params.storeSeq()))
             .and(nmFilter(params.q()));
     Sort sort = Sort.by(Sort.Order.desc("expenseAt"), Sort.Order.desc("seq"));
-    return expenseRepo.findAll(spec, sort).stream().map(ExpenseRes::from).toList();
+    return toRes(expenseRepo.findAll(spec, sort));
   }
 
   public ExpenseRes findBySeq(Long seq) {
-    return ExpenseRes.from(get(seq));
+    return toRes(get(seq));
   }
 
   /** 같은 일자 + 같은 매장 기존 지출. */
   public Optional<ExpenseRes> lookup(LocalDate date, Short storeSeq) {
-    return expenseRepo.findByStoreAndDay(storeSeq, date).map(ExpenseRes::from);
+    return expenseRepo.findByStoreAndDay(storeSeq, date).map(this::toRes);
   }
 
   /** 카테고리에서 쓴 지출명 — 최근 사용순. */
@@ -81,7 +94,9 @@ public class ExpenseService {
     OffsetDateTime now = OffsetDateTime.now();
     e.setRegAt(now);
     e.setModAt(now);
-    return ExpenseRes.from(expenseRepo.save(e));
+    expenseRepo.save(e);
+    replaceProducts(e.getSeq(), req.products());
+    return toRes(e);
   }
 
   /** 전체 교체 (PUT). */
@@ -90,7 +105,9 @@ public class ExpenseService {
     Expense e = get(seq);
     apply(e, req);
     e.setModAt(OffsetDateTime.now());
-    return ExpenseRes.from(e);
+    expenseRepo.flush();
+    replaceProducts(seq, req.products());
+    return toRes(get(seq));
   }
 
   /** 지출 삭제 — 품목도 함께 삭제. */
@@ -132,6 +149,71 @@ public class ExpenseService {
     e.setAmount(req.amount());
     e.setExpenseAt(startOf(req.expenseDt()));
     e.setCmt(req.cmt());
+  }
+
+  /**
+   * 품목 전체 교체 — 벌크 삭제 후 삽입.
+   *
+   * <p>단위수량 미사용 단위의 제품이면 unitCnt 를 비운다. 같은 (제품, 규격) 이 두 줄이면 차단 (프론트가 합쳐서 보낸다).
+   */
+  private void replaceProducts(Long expsSeq, List<ExpenseProductReq> reqs) {
+    expenseProductRepo.deleteByExpsSeq(expsSeq);
+    if (reqs == null || reqs.isEmpty()) return;
+
+    Map<Integer, Product> products =
+        productRepo.findAllById(reqs.stream().map(ExpenseProductReq::prdSeq).toList()).stream()
+            .collect(Collectors.toMap(Product::getSeq, p -> p));
+    Map<Short, Unit> units =
+        unitRepo.findAllById(products.values().stream().map(Product::getUnitSeq).toList()).stream()
+            .collect(Collectors.toMap(Unit::getSeq, u -> u));
+
+    Set<String> keys = new HashSet<>();
+    List<ExpenseProduct> lines =
+        reqs.stream()
+            .map(
+                r -> {
+                  Product prd = products.get(r.prdSeq());
+                  if (prd == null) {
+                    throw new EntityNotFoundException("product " + r.prdSeq() + " not found");
+                  }
+                  BigDecimal unitCnt =
+                      units.get(prd.getUnitSeq()).getIsUnitCnt() && r.unitCnt() != null
+                          ? r.unitCnt().setScale(2, RoundingMode.UNNECESSARY)
+                          : null;
+                  if (!keys.add(r.prdSeq() + ":" + unitCnt)) {
+                    throw new IllegalArgumentException("같은 제품·규격이 구입목록에 두 번 들어있습니다.");
+                  }
+                  ExpenseProduct line = new ExpenseProduct();
+                  line.setExpsSeq(expsSeq);
+                  line.setPrdSeq(r.prdSeq());
+                  line.setCnt(r.cnt().shortValue());
+                  line.setPrice(r.price());
+                  line.setUnitCnt(unitCnt);
+                  line.setCmt(r.cmt());
+                  return line;
+                })
+            .toList();
+    expenseProductRepo.saveAll(lines);
+  }
+
+  private ExpenseRes toRes(Expense e) {
+    return toRes(List.of(e)).getFirst();
+  }
+
+  /** 품목은 지출 목록 전체를 한 번의 IN 쿼리로 묶어 가져온다. */
+  private List<ExpenseRes> toRes(List<Expense> expenses) {
+    if (expenses.isEmpty()) return List.of();
+    Map<Long, List<ExpenseProductRes>> linesByExps =
+        expenseProductRepo
+            .findByExpsSeqInOrderBySeq(expenses.stream().map(Expense::getSeq).toList())
+            .stream()
+            .collect(
+                Collectors.groupingBy(
+                    ExpenseProduct::getExpsSeq,
+                    Collectors.mapping(ExpenseProductRes::from, Collectors.toList())));
+    return expenses.stream()
+        .map(e -> ExpenseRes.from(e, linesByExps.getOrDefault(e.getSeq(), List.of())))
+        .toList();
   }
 
   private static OffsetDateTime startOf(LocalDate date) {
