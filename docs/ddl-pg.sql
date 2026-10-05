@@ -189,7 +189,9 @@ create table public.m_ingredient
     seq     smallserial
         primary key,
     ctg_seq smallint,
-    nm      varchar(100) not null,
+    nm      varchar(100) not null
+        constraint uq_ingredient
+            unique,
     options jsonb,
     reg_at  timestamp with time zone default now(),
     mod_at  timestamp with time zone default now()

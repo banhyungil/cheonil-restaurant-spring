@@ -52,6 +52,10 @@ alter table m_product
 alter table m_product_info
     add constraint uq_product_info unique (ingd_seq, nm);
 
+-- 식자재명 유니크 — 제품 등록 시 식자재를 이름으로 찾고 없으면 생성 (기존 데이터 중복 없음 확인)
+alter table m_ingredient
+    add constraint uq_ingredient unique (nm);
+
 -- ---------------------------------------------------------------------
 -- m_unit — 기준 단위 환산 (식자재별 가격 비교용)
 --   base_unit_seq NULL = 자기 자신이 기준 단위 (kg, L, 개, 단 ...)
