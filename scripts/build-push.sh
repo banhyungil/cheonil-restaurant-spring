@@ -41,19 +41,18 @@ fail() {
   exit 1
 }
 
-# 커밋 SHA 태그 — 미커밋 변경이 있으면 -dirty 접미사 (어떤 소스로 빌드됐는지 추적용).
+# 커밋 SHA 태그 — 빌드 소스가 HEAD 커밋이므로 dirty 여부와 무관하게 sha 그대로.
+# 미커밋 변경은 이미지에 포함되지 않으므로 알림만.
 git_tag() {
   local dir="$1"
-  local sha
-  sha="$(git -C "$dir" rev-parse --short HEAD)"
   if [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
-    echo "[WARN] $(basename "$dir") 에 커밋되지 않은 변경이 있습니다. (태그: $sha-dirty)" >&2
-    sha="$sha-dirty"
+    echo "[WARN] $(basename "$dir") 에 커밋되지 않은 변경이 있습니다. (이미지에 미포함 — HEAD 기준 빌드)" >&2
   fi
-  echo "$sha"
+  git -C "$dir" rev-parse --short HEAD
 }
 
 # build + push — Mac(arm64) 에서도 매장 PC 용 amd64 이미지를 만들기 위해 buildx 사용.
+# 빌드 context 는 git archive(HEAD) tar — 작업 트리의 미커밋/untracked 파일 제외, 파일 권한도 git 기준(644/755).
 build_push() {
   local name="$1" dir="$2" image="$3"
   local tag
@@ -61,12 +60,12 @@ build_push() {
 
   echo
   echo "=== [$name] $image ($tag, $PLATFORM) ==="
-  docker buildx build \
+  git -C "$dir" archive --format=tar HEAD | docker buildx build \
     --platform "$PLATFORM" \
     -t "$image:latest" \
     -t "$image:$tag" \
     --push \
-    "$dir" || fail "$name 빌드/push 실패"
+    - || fail "$name 빌드/push 실패"
 }
 
 case "$TARGET" in
